@@ -1,11 +1,10 @@
 import { create } from "zustand";
 import type { Aircraft } from "../utils/api";
+import type { SatelliteMeta } from "../utils/tle";
 
-export interface SelectedEntity {
-  type: "aircraft";
-  id: string;
-  data: Aircraft;
-}
+export type SelectedEntity =
+  | { type: "aircraft"; id: string; data: Aircraft }
+  | { type: "satellite"; id: string; data: SatelliteMeta };
 
 export interface Viewport {
   lat: number;
@@ -52,7 +51,7 @@ export const useStore = create<AppStore>((set) => ({
   layerVisibility: {
     aircraft: true,
     vessels: false,
-    satellites: false,
+    satellites: true,
     jamming: false,
     fires: false,
     quakes: false,

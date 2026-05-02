@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import { AircraftLayer } from "../layers/AircraftLayer";
+import { SatelliteLayer } from "../layers/SatelliteLayer";
 import { useStore } from "../store";
 
 export default function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const layerRef = useRef<AircraftLayer | null>(null);
+  const satelliteLayerRef = useRef<SatelliteLayer | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -105,6 +107,11 @@ export default function Viewer() {
       const layer = new AircraftLayer(viewer);
       layerRef.current = layer;
       layer.mount();
+
+      // Satellite layer (TLE fetch + SGP4 worker)
+      const satLayer = new SatelliteLayer(viewer);
+      satelliteLayerRef.current = satLayer;
+      void satLayer.mount();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -113,6 +120,8 @@ export default function Viewer() {
     }
 
     return () => {
+      satelliteLayerRef.current?.destroy();
+      satelliteLayerRef.current = null;
       layerRef.current?.destroy();
       layerRef.current = null;
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {

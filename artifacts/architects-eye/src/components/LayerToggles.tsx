@@ -10,7 +10,7 @@ interface LayerSpec {
 const LAYERS: LayerSpec[] = [
   { key: "aircraft", label: "Aircraft", color: "#22d3ee", enabled: true },
   { key: "vessels", label: "Vessels", color: "#3b82f6", enabled: false },
-  { key: "satellites", label: "Satellites", color: "#a855f7", enabled: false },
+  { key: "satellites", label: "Satellites", color: "#a855f7", enabled: true },
   { key: "jamming", label: "Jamming", color: "#ef4444", enabled: false },
   { key: "fires", label: "Fires", color: "#f97316", enabled: false },
   { key: "quakes", label: "Quakes", color: "#facc15", enabled: false },

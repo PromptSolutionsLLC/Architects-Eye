@@ -1,5 +1,6 @@
-import { useStore } from "../store";
+import { useStore, type SelectedEntity } from "../store";
 import type { Aircraft } from "../utils/api";
+import type { SatelliteMeta } from "../utils/tle";
 
 function formatAlt(alt: Aircraft["alt_baro"]): string {
   if (alt === "ground" || alt == null) return "GND";
@@ -18,6 +19,19 @@ function formatSpeed(gs: number | undefined): string {
 function formatHeading(track: number | undefined): string {
   if (track == null) return "—";
   return `${Math.round(track).toString().padStart(3, "0")}°`;
+}
+
+function formatKm(km: number): string {
+  if (!isFinite(km) || km <= 0) return "—";
+  return `${km.toFixed(1).toLocaleString()} km`;
+}
+
+function formatPeriod(min: number): string {
+  if (!isFinite(min) || min <= 0) return "—";
+  if (min < 60) return `${min.toFixed(1)} min`;
+  const h = Math.floor(min / 60);
+  const m = (min % 60).toFixed(1);
+  return `${h}h ${m}m`;
 }
 
 interface RowProps {
@@ -41,12 +55,149 @@ function Row({ label, value, accent }: RowProps) {
   );
 }
 
+function PanelHeader({
+  label,
+  onClose,
+}: {
+  label: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: "1.5rem",
+      }}
+    >
+      <span
+        style={{
+          color: "#22d3ee",
+          fontSize: "0.65rem",
+          letterSpacing: "0.2em",
+          textTransform: "uppercase",
+        }}
+      >
+        ▶ {label}
+      </span>
+      <button
+        onClick={onClose}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "#64748b",
+          cursor: "pointer",
+          fontSize: "1rem",
+          lineHeight: 1,
+          padding: "0.25rem 0.5rem",
+          transition: "color 0.15s",
+        }}
+        onMouseEnter={(e) =>
+          ((e.target as HTMLButtonElement).style.color = "#fff")
+        }
+        onMouseLeave={(e) =>
+          ((e.target as HTMLButtonElement).style.color = "#64748b")
+        }
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function HeroTitle({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div style={{ marginBottom: "1.75rem" }}>
+      <div
+        style={{
+          color: "#fff",
+          fontSize: "1.6rem",
+          fontWeight: 700,
+          letterSpacing: "0.1em",
+          lineHeight: 1.1,
+          wordBreak: "break-word",
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          color: "#475569",
+          fontSize: "0.6rem",
+          letterSpacing: "0.2em",
+          textTransform: "uppercase",
+          marginTop: "0.25rem",
+        }}
+      >
+        {subtitle}
+      </div>
+    </div>
+  );
+}
+
+function AircraftDetails({
+  ac,
+  onClose,
+}: {
+  ac: Aircraft;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <PanelHeader label="Aircraft" onClose={onClose} />
+      <HeroTitle title={ac.flight?.trim() || "UNKNOWN"} subtitle="Callsign" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="ICAO24" value={ac.hex.toUpperCase()} />
+        <Row label="Registration" value={ac.r ?? "—"} />
+        <Row label="Aircraft type" value={ac.t ?? "—"} />
+        <Row label="Altitude" value={formatAlt(ac.alt_baro)} accent />
+        <Row label="Groundspeed" value={formatSpeed(ac.gs)} />
+        <Row label="Heading" value={formatHeading(ac.track)} />
+      </div>
+    </>
+  );
+}
+
+function SatelliteDetails({
+  sat,
+  onClose,
+}: {
+  sat: SatelliteMeta;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <PanelHeader label="Satellite" onClose={onClose} />
+      <HeroTitle title={sat.name || "UNKNOWN"} subtitle="Object name" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="NORAD ID" value={sat.noradId || "—"} />
+        <Row label="Category" value={sat.category} />
+        <Row label="Altitude" value={formatKm(sat.altitudeKm)} accent />
+        <Row label="Orbital period" value={formatPeriod(sat.periodMin)} />
+      </div>
+    </>
+  );
+}
+
+function PanelBody({
+  selected,
+  onClose,
+}: {
+  selected: SelectedEntity;
+  onClose: () => void;
+}) {
+  if (selected.type === "aircraft") {
+    return <AircraftDetails ac={selected.data} onClose={onClose} />;
+  }
+  return <SatelliteDetails sat={selected.data} onClose={onClose} />;
+}
+
 export function EntityPanel() {
   const selectedEntity = useStore((s) => s.selectedEntity);
   const setSelectedEntity = useStore((s) => s.setSelectedEntity);
 
   const visible = selectedEntity !== null;
-  const ac = selectedEntity?.data;
 
   return (
     <div
@@ -66,92 +217,20 @@ export function EntityPanel() {
         fontFamily: "monospace",
       }}
     >
-      {ac && (
+      {selectedEntity && (
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             height: "100%",
             padding: "1.25rem",
+            overflowY: "auto",
           }}
         >
-          {/* Header bar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: "1.5rem",
-            }}
-          >
-            <span
-              style={{
-                color: "#22d3ee",
-                fontSize: "0.65rem",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}
-            >
-              ▶ Aircraft
-            </span>
-            <button
-              onClick={() => setSelectedEntity(null)}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#64748b",
-                cursor: "pointer",
-                fontSize: "1rem",
-                lineHeight: 1,
-                padding: "0.25rem 0.5rem",
-                transition: "color 0.15s",
-              }}
-              onMouseEnter={(e) =>
-                ((e.target as HTMLButtonElement).style.color = "#fff")
-              }
-              onMouseLeave={(e) =>
-                ((e.target as HTMLButtonElement).style.color = "#64748b")
-              }
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Callsign */}
-          <div style={{ marginBottom: "1.75rem" }}>
-            <div
-              style={{
-                color: "#fff",
-                fontSize: "1.6rem",
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                lineHeight: 1.1,
-              }}
-            >
-              {ac.flight?.trim() || "UNKNOWN"}
-            </div>
-            <div
-              style={{
-                color: "#475569",
-                fontSize: "0.6rem",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                marginTop: "0.25rem",
-              }}
-            >
-              Callsign
-            </div>
-          </div>
-
-          {/* Data grid */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <Row label="ICAO24" value={ac.hex.toUpperCase()} />
-            <Row label="Registration" value={ac.r ?? "—"} />
-            <Row label="Aircraft type" value={ac.t ?? "—"} />
-            <Row label="Altitude" value={formatAlt(ac.alt_baro)} accent />
-            <Row label="Groundspeed" value={formatSpeed(ac.gs)} />
-            <Row label="Heading" value={formatHeading(ac.track)} />
-          </div>
+          <PanelBody
+            selected={selectedEntity}
+            onClose={() => setSelectedEntity(null)}
+          />
         </div>
       )}
     </div>
