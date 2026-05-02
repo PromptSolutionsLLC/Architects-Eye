@@ -2,11 +2,42 @@ import { Router, type IRouter } from "express";
 
 interface CacheEntry {
   data: unknown;
-  expiresAt: number;
+  fetchedAt: number;
 }
 
+const CACHE_FRESH_MS = 8_000;
+const CACHE_STALE_MS = 60_000;
+
+// Fresh/stale response cache
 const cache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 8_000;
+// In-flight deduplication: concurrent requests for the same key share one fetch
+const inFlight = new Map<string, Promise<unknown>>();
+
+async function fetchUpstream(
+  key: string,
+  url: string,
+): Promise<unknown> {
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "architects-eye/1.0" },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      throw new Error(`adsb.lol returned HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    cache.set(key, { data, fetchedAt: Date.now() });
+    return data;
+  })().finally(() => {
+    inFlight.delete(key);
+  });
+
+  inFlight.set(key, promise);
+  return promise;
+}
 
 const router: IRouter = Router();
 
@@ -27,44 +58,40 @@ router.get("/aircraft", async (req, res) => {
     return;
   }
 
-  const cacheKey = `${latNum.toFixed(4)}/${lonNum.toFixed(4)}/${distNum}`;
+  const key = `${latNum.toFixed(4)}/${lonNum.toFixed(4)}/${distNum}`;
   const now = Date.now();
-  const cached = cache.get(cacheKey);
+  const cached = cache.get(key);
 
-  if (cached && now < cached.expiresAt) {
+  // Serve fresh cache immediately without touching upstream
+  if (cached && now - cached.fetchedAt < CACHE_FRESH_MS) {
     res.json(cached.data);
     return;
   }
 
-  const upstream = `https://api.adsb.lol/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
+  const upstreamUrl = `https://api.adsb.lol/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
 
   try {
-    const upstream_res = await fetch(upstream, {
-      headers: { "User-Agent": "architects-eye/1.0" },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const data = await fetchUpstream(key, upstreamUrl);
+    res.json(data);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    req.log.error({ err, key }, "upstream fetch failed");
 
-    if (!upstream_res.ok) {
-      req.log.warn({ status: upstream_res.status }, "adsb.lol error");
-      res.status(502).json({ error: "upstream error", ac: [] });
+    // Serve stale cache rather than a hard 502
+    if (cached && now - cached.fetchedAt < CACHE_STALE_MS) {
+      req.log.warn(
+        { key, ageMs: now - cached.fetchedAt },
+        "serving stale cache after upstream error",
+      );
+      res.json(cached.data);
       return;
     }
 
-    const data = await upstream_res.json();
-    cache.set(cacheKey, { data, expiresAt: now + CACHE_TTL_MS });
-
-    // Evict old entries to keep memory bounded
-    if (cache.size > 500) {
-      const cutoff = Date.now();
-      for (const [key, entry] of cache) {
-        if (entry.expiresAt < cutoff) cache.delete(key);
-      }
-    }
-
-    res.json(data);
-  } catch (err) {
-    req.log.error({ err }, "Failed to fetch from adsb.lol");
-    res.status(502).json({ error: "upstream unreachable", ac: [] });
+    res.status(502).json({
+      error: "upstream unreachable",
+      detail,
+      ac: [],
+    });
   }
 });
 
