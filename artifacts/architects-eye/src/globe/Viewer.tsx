@@ -1,23 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
+import { AircraftLayer } from "../layers/AircraftLayer";
+import { useStore } from "../store";
 
 export default function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const layerRef = useRef<AircraftLayer | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
 
-    const container = containerRef.current;
-    let viewer: Cesium.Viewer | null = null;
-
     try {
       Cesium.Ion.defaultAccessToken =
         import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
 
-      viewer = new Cesium.Viewer(container, {
+      const viewer = new Cesium.Viewer(containerRef.current, {
         timeline: false,
         animation: false,
         fullscreenButton: false,
@@ -44,6 +44,12 @@ export default function Viewer() {
       viewer.scene.globe.enableLighting = true;
       viewer.scene.skyAtmosphere.show = false;
 
+      // Real-time clock for SampledPositionProperty interpolation
+      viewer.clock.currentTime = Cesium.JulianDate.now();
+      viewer.clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+      viewer.clock.shouldAnimate = true;
+      viewer.clock.multiplier = 1.0;
+
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(-72.7, 41.5, 2_000_000),
         orientation: {
@@ -54,6 +60,25 @@ export default function Viewer() {
         duration: 0,
       });
 
+      // Camera moveEnd → update store viewport (debounced 500 ms)
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+      viewer.camera.moveEnd.addEventListener(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          if (!viewerRef.current || viewerRef.current.isDestroyed()) return;
+          const cart = viewerRef.current.camera.positionCartographic;
+          const lat = Cesium.Math.toDegrees(cart.latitude);
+          const lon = Cesium.Math.toDegrees(cart.longitude);
+          const heightKm = cart.height / 1000;
+          // 250 nm at 2000 km altitude; clamp 50–500 nm
+          const distNm = Math.max(
+            50,
+            Math.min(500, Math.round(heightKm * 0.125)),
+          );
+          useStore.getState().setViewport({ lat, lon, distNm });
+        }, 500);
+      });
+
       viewer.creditDisplay.addStaticCredit(
         new Cesium.Credit(
           '<a href="https://maps.google.com" target="_blank" rel="noreferrer">Map data ©2024 Google</a>',
@@ -61,24 +86,25 @@ export default function Viewer() {
         ),
       );
 
-      const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? "";
-
+      // Google Photorealistic 3D Tiles
       (async () => {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset({
-            apiKey: googleApiKey,
+            apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? "",
             onlyUsingWithGoogleGeocoder: true,
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
           }
-        } catch (tileErr) {
-          console.error(
-            "Failed to load Google Photorealistic 3D Tiles:",
-            tileErr,
-          );
+        } catch (err) {
+          console.error("Failed to load Google Photorealistic 3D Tiles:", err);
         }
       })();
+
+      // Aircraft layer
+      const layer = new AircraftLayer(viewer);
+      layerRef.current = layer;
+      layer.mount();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -87,6 +113,8 @@ export default function Viewer() {
     }
 
     return () => {
+      layerRef.current?.destroy();
+      layerRef.current = null;
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy();
       }

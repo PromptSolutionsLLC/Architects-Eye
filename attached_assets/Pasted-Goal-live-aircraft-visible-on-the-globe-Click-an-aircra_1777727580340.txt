@@ -1,0 +1,39 @@
+Goal: live aircraft visible on the globe. Click an aircraft → side panel shows info.
+
+Data source: ADSB.lol public API. NO authentication required. Use these endpoints:
+- Bbox query: https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}
+- Returns { ac: Aircraft[] } where each Aircraft has: hex (icao24), flight (callsign), lat, lon, alt_baro, gs (groundspeed kts), track (heading deg), t (type), r (registration)
+
+Implementation:
+
+1. src/store/index.ts — Zustand store:
+   { selectedEntity: { type, id, data } | null,
+     setSelectedEntity: (e) => void,
+     viewport: { lat, lon, distNm }, 
+     setViewport: (v) => void }
+
+2. src/utils/api.ts — `fetchAircraft(lat, lon, distNm)` returning typed aircraft array.
+
+3. src/layers/AircraftLayer.ts — function that:
+   - On mount, polls every 12 seconds based on current viewport from store
+   - Maintains a Map<icao24, Cesium.Entity>
+   - Each Entity uses SampledPositionProperty with smooth interpolation between updates
+   - Each Entity is rendered as a small white triangle billboard pointing in the heading direction (no glTF model — use a programmatically generated SVG triangle as the billboard image)
+   - On entity removal (not seen in 60s), delete from viewer
+   - Click handler: viewer.screenSpaceEventHandler.setInputAction on LEFT_CLICK; if pick is an aircraft entity, store.setSelectedEntity({ type: 'aircraft', id, data })
+
+4. src/components/EntityPanel.tsx — slide-in right panel using Tailwind:
+   - Reads selectedEntity from store
+   - Shows: callsign, ICAO24, registration, type, altitude (in feet, FL format), speed (kts), heading (deg), origin country if available
+   - Close button (X)
+   - Cinematic dark theme: bg-slate-900/95 backdrop-blur, border border-cyan-500/30, font-mono for all numerics
+
+5. Wire Viewer to update store.viewport on camera moveEnd (debounced 500ms): center = viewer.camera.positionCartographic, distNm calculated from current view height (use 250nm at zoom levels around CT, scale up if zoomed out).
+
+6. The bbox should be expanded by 20% beyond the visible viewport so planes don't pop in at the edges.
+
+7. Handle errors gracefully — if ADSB.lol returns 429 or fails, log a warning and back off (don't crash).
+
+Definition of done: I open the live preview, see planes moving on the globe, click one, and see its info in a slide-in panel. Plane triangles point in the direction of travel.
+
+Do not add satellites, vessels, jamming, or any other layer. Aircraft only.
