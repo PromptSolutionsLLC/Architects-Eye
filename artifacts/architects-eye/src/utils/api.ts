@@ -15,7 +15,13 @@ export async function fetchAircraft(
   lon: number,
   distNm: number,
 ): Promise<Aircraft[]> {
-  const url = `https://api.adsb.lol/v2/lat/${lat.toFixed(4)}/lon/${lon.toFixed(4)}/dist/${Math.round(distNm)}`;
+  const params = new URLSearchParams({
+    lat: lat.toFixed(4),
+    lon: lon.toFixed(4),
+    dist: String(Math.round(distNm)),
+  });
+  const url = `/api/aircraft?${params.toString()}`;
+
   try {
     const res = await fetch(url);
     if (res.status === 429) {
@@ -23,7 +29,7 @@ export async function fetchAircraft(
       return [];
     }
     if (!res.ok) {
-      console.warn(`[Aircraft] API error ${res.status}`);
+      console.warn(`[Aircraft] Proxy error ${res.status}`);
       return [];
     }
     const data = (await res.json()) as { ac?: Aircraft[] };
