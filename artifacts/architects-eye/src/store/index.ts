@@ -1,15 +1,19 @@
 import { create } from "zustand";
 import type { Aircraft } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
+import type { VesselSelectionData } from "../layers/VesselLayer";
+import type { BBox } from "../ws/aisstream-client";
 
 export type SelectedEntity =
   | { type: "aircraft"; id: string; data: Aircraft }
-  | { type: "satellite"; id: string; data: SatelliteMeta };
+  | { type: "satellite"; id: string; data: SatelliteMeta }
+  | { type: "vessel"; id: string; data: VesselSelectionData };
 
 export interface Viewport {
   lat: number;
   lon: number;
   distNm: number;
+  bbox: BBox | null;
 }
 
 export type LayerKey =
@@ -34,6 +38,9 @@ interface AppStore {
   layerVisibility: LayerVisibility;
   setLayerVisible: (layer: LayerKey, visible: boolean) => void;
 
+  layerAvailability: Record<LayerKey, boolean>;
+  setLayerAvailable: (layer: LayerKey, available: boolean) => void;
+
   layerCounts: LayerCounts;
   setLayerCount: (layer: LayerKey, count: number) => void;
 
@@ -45,12 +52,12 @@ export const useStore = create<AppStore>((set) => ({
   selectedEntity: null,
   setSelectedEntity: (e) => set({ selectedEntity: e }),
 
-  viewport: { lat: 41.5, lon: -72.7, distNm: 250 },
+  viewport: { lat: 41.5, lon: -72.7, distNm: 250, bbox: null },
   setViewport: (v) => set({ viewport: v }),
 
   layerVisibility: {
     aircraft: true,
-    vessels: false,
+    vessels: true,
     satellites: true,
     jamming: false,
     fires: false,
@@ -59,6 +66,19 @@ export const useStore = create<AppStore>((set) => ({
   setLayerVisible: (layer, visible) =>
     set((state) => ({
       layerVisibility: { ...state.layerVisibility, [layer]: visible },
+    })),
+
+  layerAvailability: {
+    aircraft: true,
+    vessels: true,
+    satellites: true,
+    jamming: false,
+    fires: false,
+    quakes: false,
+  },
+  setLayerAvailable: (layer, available) =>
+    set((state) => ({
+      layerAvailability: { ...state.layerAvailability, [layer]: available },
     })),
 
   layerCounts: {

@@ -9,7 +9,7 @@ interface LayerSpec {
 
 const LAYERS: LayerSpec[] = [
   { key: "aircraft", label: "Aircraft", color: "#22d3ee", enabled: true },
-  { key: "vessels", label: "Vessels", color: "#3b82f6", enabled: false },
+  { key: "vessels", label: "Vessels", color: "#60a5fa", enabled: true },
   { key: "satellites", label: "Satellites", color: "#a855f7", enabled: true },
   { key: "jamming", label: "Jamming", color: "#ef4444", enabled: false },
   { key: "fires", label: "Fires", color: "#f97316", enabled: false },
@@ -59,7 +59,12 @@ function ToggleSwitch({
 function LayerRow({ spec }: RowProps) {
   const visible = useStore((s) => s.layerVisibility[spec.key]);
   const count = useStore((s) => s.layerCounts[spec.key]);
+  const available = useStore((s) => s.layerAvailability[spec.key]);
   const setLayerVisible = useStore((s) => s.setLayerVisible);
+
+  // If the layer was marked unavailable at runtime (e.g. WS failed),
+  // hide the row entirely per spec.
+  if (spec.enabled && !available) return null;
 
   const isDisabled = !spec.enabled;
   const dim = isDisabled ? "opacity-45" : "";

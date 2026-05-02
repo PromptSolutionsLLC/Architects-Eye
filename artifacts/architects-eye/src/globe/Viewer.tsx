@@ -3,6 +3,8 @@ import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import { AircraftLayer } from "../layers/AircraftLayer";
 import { SatelliteLayer } from "../layers/SatelliteLayer";
+import { VesselLayer } from "../layers/VesselLayer";
+import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 
 export default function Viewer() {
@@ -10,6 +12,8 @@ export default function Viewer() {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const layerRef = useRef<AircraftLayer | null>(null);
   const satelliteLayerRef = useRef<SatelliteLayer | null>(null);
+  const vesselLayerRef = useRef<VesselLayer | null>(null);
+  const aisClientRef = useRef<AISStreamClient | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,7 +81,17 @@ export default function Viewer() {
             50,
             Math.min(500, Math.round(heightKm * 0.125)),
           );
-          useStore.getState().setViewport({ lat, lon, distNm });
+          // BBox from camera view rectangle (for AIS subscription)
+          const rect = viewerRef.current.camera.computeViewRectangle();
+          const bbox = rect
+            ? {
+                swLat: Cesium.Math.toDegrees(rect.south),
+                swLon: Cesium.Math.toDegrees(rect.west),
+                neLat: Cesium.Math.toDegrees(rect.north),
+                neLon: Cesium.Math.toDegrees(rect.east),
+              }
+            : null;
+          useStore.getState().setViewport({ lat, lon, distNm, bbox });
         }, 500);
       });
 
@@ -112,6 +126,20 @@ export default function Viewer() {
       const satLayer = new SatelliteLayer(viewer);
       satelliteLayerRef.current = satLayer;
       void satLayer.mount();
+
+      // AIS WebSocket client + Vessel layer
+      const aisClient = new AISStreamClient();
+      aisClientRef.current = aisClient;
+      aisClient.onPermanentFailure(() => {
+        console.warn(
+          "[AIS] WebSocket permanently failed — hiding vessels toggle",
+        );
+        useStore.getState().setLayerAvailable("vessels", false);
+      });
+      const vesselLayer = new VesselLayer(viewer, aisClient);
+      vesselLayerRef.current = vesselLayer;
+      vesselLayer.mount();
+      aisClient.connect();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -120,6 +148,10 @@ export default function Viewer() {
     }
 
     return () => {
+      vesselLayerRef.current?.destroy();
+      vesselLayerRef.current = null;
+      aisClientRef.current?.destroy();
+      aisClientRef.current = null;
       satelliteLayerRef.current?.destroy();
       satelliteLayerRef.current = null;
       layerRef.current?.destroy();

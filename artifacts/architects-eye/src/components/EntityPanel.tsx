@@ -1,6 +1,8 @@
 import { useStore, type SelectedEntity } from "../store";
 import type { Aircraft } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
+import type { VesselSelectionData } from "../layers/VesselLayer";
+import { decodeShipType } from "../ws/aisstream-client";
 
 function formatAlt(alt: Aircraft["alt_baro"]): string {
   if (alt === "ground" || alt == null) return "GND";
@@ -180,6 +182,42 @@ function SatelliteDetails({
   );
 }
 
+function VesselDetails({
+  v,
+  onClose,
+}: {
+  v: VesselSelectionData;
+  onClose: () => void;
+}) {
+  const heroName = v.name && v.name.trim() ? v.name : `MMSI ${v.mmsi}`;
+  return (
+    <>
+      <PanelHeader label="Vessel" onClose={onClose} />
+      <HeroTitle title={heroName} subtitle="Vessel name" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="MMSI" value={String(v.mmsi)} />
+        <Row label="Type" value={decodeShipType(v.type)} />
+        <Row label="Flag" value={v.flag || "—"} />
+        <Row label="Callsign" value={v.callsign || "—"} />
+        <Row
+          label="Speed over ground"
+          value={v.sog > 0 ? `${v.sog.toFixed(1)} kts` : "—"}
+          accent
+        />
+        <Row
+          label="Course over ground"
+          value={
+            v.cog >= 0 && v.cog <= 360
+              ? `${Math.round(v.cog).toString().padStart(3, "0")}°`
+              : "—"
+          }
+        />
+        <Row label="Destination" value={v.destination || "—"} />
+      </div>
+    </>
+  );
+}
+
 function PanelBody({
   selected,
   onClose,
@@ -190,7 +228,10 @@ function PanelBody({
   if (selected.type === "aircraft") {
     return <AircraftDetails ac={selected.data} onClose={onClose} />;
   }
-  return <SatelliteDetails sat={selected.data} onClose={onClose} />;
+  if (selected.type === "satellite") {
+    return <SatelliteDetails sat={selected.data} onClose={onClose} />;
+  }
+  return <VesselDetails v={selected.data} onClose={onClose} />;
 }
 
 export function EntityPanel() {
