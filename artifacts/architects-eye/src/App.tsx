@@ -1,7 +1,9 @@
+import Viewer from "./globe/Viewer";
+
 export default function App() {
   return (
-    <div className="init-screen">
-      <span className="init-text">ARCHITECT'S EYE :: INITIALIZING</span>
+    <div style={{ width: "100vw", height: "100vh", overflow: "hidden", background: "#000" }}>
+      <Viewer />
     </div>
   );
 }
