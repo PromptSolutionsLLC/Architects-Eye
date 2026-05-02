@@ -237,6 +237,13 @@ export class AISStreamClient {
           Latitude?: number;
           Longitude?: number;
         };
+        StandardClassBPositionReport?: {
+          Cog?: number;
+          Sog?: number;
+          TrueHeading?: number;
+          Latitude?: number;
+          Longitude?: number;
+        };
         ShipStaticData?: {
           Name?: string;
           Type?: number;
@@ -250,9 +257,14 @@ export class AISStreamClient {
     if (!md || typeof md.MMSI !== "number") return;
     const mmsi = md.MMSI;
 
-    if (m.MessageType === "PositionReport") {
-      const r = m.Message?.PositionReport;
-      if (!r) return;
+    const r =
+      m.MessageType === "PositionReport"
+        ? m.Message?.PositionReport
+        : m.MessageType === "StandardClassBPositionReport"
+          ? m.Message?.StandardClassBPositionReport
+          : null;
+
+    if (r) {
       const lat = typeof md.latitude === "number" ? md.latitude : r.Latitude;
       const lon = typeof md.longitude === "number" ? md.longitude : r.Longitude;
       if (typeof lat !== "number" || typeof lon !== "number") return;
@@ -265,7 +277,24 @@ export class AISStreamClient {
         heading: r.TrueHeading ?? r.Cog ?? 0,
         ts: Date.now(),
       });
-    } else if (m.MessageType === "ShipStaticData") {
+      // AISStream includes ShipName in MetaData on every message, so even
+      // without ShipStaticData subscriptions we can still surface the name
+      // and country flag in the entity panel.
+      const shipName = (md.ShipName || "").trim();
+      if (shipName) {
+        this.listeners.staticData?.({
+          mmsi,
+          name: shipName,
+          type: 0,
+          callsign: "",
+          destination: "",
+          flag: midToFlag(mmsi),
+        });
+      }
+      return;
+    }
+
+    if (m.MessageType === "ShipStaticData") {
       const s = m.Message?.ShipStaticData;
       if (!s) return;
       this.listeners.staticData?.({

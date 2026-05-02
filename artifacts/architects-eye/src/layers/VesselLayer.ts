@@ -13,7 +13,7 @@ const KNOTS_TO_MS = 0.514444;
 const EARTH_RADIUS_M = 6_371_000;
 
 const VESSEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
-  <polygon points="9,2 16,16 9,12 2,16" fill="#60a5fa" stroke="#dbeafe" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="9,2 16,16 9,12 2,16" fill="#34d399" stroke="#d1fae5" stroke-width="1" stroke-linejoin="round"/>
 </svg>`;
 const VESSEL_ICON = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(VESSEL_SVG)}`;
 

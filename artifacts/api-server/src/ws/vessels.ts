@@ -98,7 +98,11 @@ function sendSubscriptionToUpstream(): void {
   const payload = {
     APIKey: apiKey,
     BoundingBoxes: boxes,
-    FilterMessageTypes: ["PositionReport", "ShipStaticData"],
+    // Strict filter: only Class A position reports (Types 1/2/3) and Class B
+    // position reports (Type 18). Explicitly excludes BaseStationReport
+    // (Type 4) and AidsToNavigationReport (Type 21), which are stationary
+    // land-based transmitters and would render as vessels on land.
+    FilterMessageTypes: ["PositionReport", "StandardClassBPositionReport"],
   };
   const json = JSON.stringify(payload);
   if (json === lastSubscriptionPayload) return;
