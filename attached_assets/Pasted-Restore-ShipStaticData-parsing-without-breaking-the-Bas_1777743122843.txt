@@ -1,0 +1,28 @@
+Restore ShipStaticData parsing without breaking the BaseStationReport / AtoN filtering.
+
+The issue: in the previous fix you removed "ShipStaticData" from FilterMessageTypes to drop land-based AIS messages. But ShipStaticData is the canonical source of vessel name, callsign, ship type, dimensions, and destination — losing it gives the entity panel an incomplete experience.
+
+Correct fix:
+
+1. server/src/ws/vessels.ts — change FilterMessageTypes back to include ALL THREE relevant types:
+   ["PositionReport", "StandardClassBPositionReport", "ShipStaticData"]
+
+   Critically, BaseStationReport (Type 4) and AidsToNavigationReport (Type 21) are NOT in this whitelist, so they are still filtered out at the AISStream upstream. The whitelist semantics already guarantee no land-based reports reach us.
+
+2. Re-enable per-message-type forwarding logic on the server:
+   - PositionReport / StandardClassBPositionReport: forward to clients whose viewport contains the lat/lon (existing logic)
+   - ShipStaticData: NO coordinates in this message type. Use the existing MMSI→last-known-position cache to attribute it to a viewport. Forward to clients whose viewport contains the MMSI's last known position.
+
+3. Client side (aisstream-client.ts): keep the existing optimistic name/flag extraction from PositionReport.MetaData (it's still useful as a fallback for vessels we haven't received ShipStaticData for yet). When a ShipStaticData arrives, MERGE it into the existing entry, preferring ShipStaticData fields over MetaData (they're more complete).
+
+4. EntityPanel vessel view should now show: name, MMSI, ship type (decoded from numeric type code via existing decodeShipType helper), flag (decoded from MMSI MID), callsign, course over ground, speed over ground, destination — all populated when ShipStaticData has been received.
+
+5. Verify on a live test: subscribe to a busy bbox like the Mediterranean for 30 seconds, confirm:
+   - PositionReport count > 0
+   - StandardClassBPositionReport count > 0
+   - ShipStaticData count > 0 (this was zero before the fix)
+   - Zero BaseStationReport, zero AidsToNavigationReport (confirming the upstream filter still works)
+   - No vessels appearing on land
+   - Click a vessel that's been around for 30+ seconds → ALL fields populated in panel
+
+Do not break aircraft, satellites, or any other layer. Do not regress the no-vessels-on-land fix.

@@ -222,7 +222,24 @@ export class VesselLayer {
   }
 
   private onStatic(s: VesselStatic): void {
-    this.staticByMmsi.set(s.mmsi, s);
+    // Merge instead of overwrite: AISStreamClient emits a lightweight
+    // staticData event for every PositionReport using MetaData.ShipName
+    // alone, then a richer one when an actual ShipStaticData arrives.
+    // Prefer non-empty / non-zero new values so a name-only update never
+    // clobbers fields populated from a previous ShipStaticData.
+    const existing = this.staticByMmsi.get(s.mmsi);
+    if (!existing) {
+      this.staticByMmsi.set(s.mmsi, s);
+      return;
+    }
+    this.staticByMmsi.set(s.mmsi, {
+      mmsi: s.mmsi,
+      name: s.name || existing.name,
+      type: s.type || existing.type,
+      callsign: s.callsign || existing.callsign,
+      destination: s.destination || existing.destination,
+      flag: s.flag || existing.flag,
+    });
   }
 
   private prune(): void {

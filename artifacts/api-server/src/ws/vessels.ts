@@ -98,11 +98,17 @@ function sendSubscriptionToUpstream(): void {
   const payload = {
     APIKey: apiKey,
     BoundingBoxes: boxes,
-    // Strict filter: only Class A position reports (Types 1/2/3) and Class B
-    // position reports (Type 18). Explicitly excludes BaseStationReport
-    // (Type 4) and AidsToNavigationReport (Type 21), which are stationary
-    // land-based transmitters and would render as vessels on land.
-    FilterMessageTypes: ["PositionReport", "StandardClassBPositionReport"],
+    // Strict whitelist: Class A position reports (Types 1/2/3), Class B
+    // position reports (Type 18), and ShipStaticData (Type 5/24 — name,
+    // ship type, callsign, destination). BaseStationReport (Type 4) and
+    // AidsToNavigationReport (Type 21) are NOT in this whitelist, so the
+    // stationary land-based transmitters that caused vessels-on-land are
+    // dropped at the AISStream upstream and never reach the server.
+    FilterMessageTypes: [
+      "PositionReport",
+      "StandardClassBPositionReport",
+      "ShipStaticData",
+    ],
   };
   const json = JSON.stringify(payload);
   if (json === lastSubscriptionPayload) return;
