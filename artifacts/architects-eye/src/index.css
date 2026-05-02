@@ -1,0 +1,42 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: #fff;
+  }
+}
+
+.init-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.init-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: clamp(0.75rem, 2vw, 1.1rem);
+  letter-spacing: 0.18em;
+  color: #00ff88;
+  text-shadow: 0 0 8px #00ff8880;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 8px #00ff8880;
+  }
+  50% {
+    opacity: 0.45;
+    text-shadow: 0 0 20px #00ff88cc;
+  }
+}
