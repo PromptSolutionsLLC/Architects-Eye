@@ -52,11 +52,11 @@ export function EntityPanel() {
     <div
       style={{
         position: "fixed",
-        top: 0,
+        top: 40,
         right: 0,
-        height: "100%",
-        width: "300px",
-        zIndex: 1000,
+        height: "calc(100% - 40px)",
+        width: "320px",
+        zIndex: 1050,
         transform: visible ? "translateX(0)" : "translateX(100%)",
         transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
         pointerEvents: visible ? "auto" : "none",
