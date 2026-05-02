@@ -72,7 +72,7 @@ export const useStore = create<AppStore>((set) => ({
     aircraft: true,
     vessels: true,
     satellites: true,
-    jamming: false,
+    jamming: true,
     fires: false,
     quakes: false,
   },

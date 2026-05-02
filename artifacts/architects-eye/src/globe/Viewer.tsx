@@ -4,6 +4,7 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import { AircraftLayer } from "../layers/AircraftLayer";
 import { SatelliteLayer } from "../layers/SatelliteLayer";
 import { VesselLayer } from "../layers/VesselLayer";
+import { JammingLayer } from "../layers/JammingLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 
@@ -13,6 +14,7 @@ export default function Viewer() {
   const layerRef = useRef<AircraftLayer | null>(null);
   const satelliteLayerRef = useRef<SatelliteLayer | null>(null);
   const vesselLayerRef = useRef<VesselLayer | null>(null);
+  const jammingLayerRef = useRef<JammingLayer | null>(null);
   const aisClientRef = useRef<AISStreamClient | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,6 +142,11 @@ export default function Viewer() {
       vesselLayerRef.current = vesselLayer;
       vesselLayer.mount();
       aisClient.connect();
+
+      // Jamming layer (static H3 hex CSV)
+      const jammingLayer = new JammingLayer(viewer);
+      jammingLayerRef.current = jammingLayer;
+      void jammingLayer.mount();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -148,6 +155,8 @@ export default function Viewer() {
     }
 
     return () => {
+      jammingLayerRef.current?.destroy();
+      jammingLayerRef.current = null;
       vesselLayerRef.current?.destroy();
       vesselLayerRef.current = null;
       aisClientRef.current?.destroy();

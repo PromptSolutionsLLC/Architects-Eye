@@ -22,7 +22,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Type**: react-vite (web app)
 - **Preview**: `/`
 - **Purpose**: Cesium globe + satellite tracking visualization
-- **Key deps**: cesium, vite-plugin-cesium, satellite.js, zustand, tailwindcss, @tailwindcss/forms
+- **Key deps**: cesium, vite-plugin-cesium, satellite.js, h3-js, zustand, tailwindcss, @tailwindcss/forms
+
+#### Data layers
+- **Aircraft** — live `/api/aircraft` poll (adsb.lol upstream, server cache + stale-on-error)
+- **Vessels** — live AISStream WebSocket via `/api/ws/vessels` (server filters PositionReport / StandardClassBPositionReport / ShipStaticData)
+- **Satellites** — `/api/tle` returns a bundled snapshot instantly (always works); a background refresh from celestrak's `gp.php` (currently WAF-blocked from this Replit egress) and falls back to `tle.ivanstanojevic.me` (paginated, 5000 most-popular sats). 24 h cache.
+- **Jamming** — static H3-hex CSV at `public/data/gpsjam-2026-05-01.csv`; cells with bad/total ≥ 5 % rendered as a red gradient via batched Cesium `Primitive` (`PolygonGeometry` per cell, `PerInstanceColorAppearance`).
 
 #### Source structure
 ```

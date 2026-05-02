@@ -77,6 +77,7 @@
   "dependencies": {
     "@tailwindcss/forms": "^0.5.11",
     "cesium": "^1.140.0",
+    "h3-js": "^4.4.0",
     "satellite.js": "^7.0.0",
     "vite-plugin-cesium": "^1.2.23",
     "zustand": "^5.0.12"
