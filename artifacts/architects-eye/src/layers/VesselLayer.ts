@@ -1,5 +1,5 @@
 import * as Cesium from "cesium";
-import { useStore } from "../store";
+import { useStore, latestSelectionOfType } from "../store";
 import {
   AISStreamClient,
   type VesselPosition,
@@ -129,10 +129,13 @@ export class VesselLayer {
       }
     });
 
+    // Vessel trail follows the most-recently-opened vessel card.
     this.unsubscribeSelection = useStore.subscribe((state) => {
-      this.syncTrail(state.selectedEntity);
+      this.syncTrail(latestSelectionOfType(state.cards, "vessel"));
     });
-    this.syncTrail(useStore.getState().selectedEntity);
+    this.syncTrail(
+      latestSelectionOfType(useStore.getState().cards, "vessel"),
+    );
 
     this.client.on({
       position: (p) => this.onPosition(p),
@@ -218,10 +221,10 @@ export class VesselLayer {
   }
 
   private syncTrail(
-    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+    selected: { type: "vessel"; id: string } | null,
   ): void {
     let newMmsi: number | null = null;
-    if (selected && selected.type === "vessel") {
+    if (selected) {
       const parsed = Number.parseInt(selected.id, 10);
       if (Number.isFinite(parsed)) newMmsi = parsed;
     }

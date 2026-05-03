@@ -231,15 +231,17 @@ export default function Viewer() {
           if (viewer.isDestroyed()) return;
           const picked = viewer.scene.pick(event.position);
           const result = Cesium.defined(picked) ? resolveClick(picked) : null;
-          if (!result) {
-            useStore.getState().setSelectedEntity(null);
-            return;
-          }
-          // EntityPanel-first ordering: selection always set before fly
-          // dispatch so the panel opens immediately, even if isTheaterFlying
-          // suppresses the camera move inside flyToInspect.
-          useStore.getState().setSelectedEntity(result.selected);
-          if (result.fly) result.fly();
+          // Click on empty space is a no-op — cards are dismissed only
+          // via their own × button, never by clicking elsewhere.
+          if (!result) return;
+          // Card-first ordering: open (or dedup-skip) the card before
+          // dispatching fly. replaceUnpinnedCards returns false when the
+          // entity already lives in a pinned card, in which case we also
+          // suppress the camera fly (treat as a redundant click).
+          const opened = useStore
+            .getState()
+            .replaceUnpinnedCards(result.selected);
+          if (opened && result.fly) result.fly();
         },
         Cesium.ScreenSpaceEventType.LEFT_CLICK,
       );

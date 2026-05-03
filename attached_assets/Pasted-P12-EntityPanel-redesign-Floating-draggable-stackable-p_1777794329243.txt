@@ -1,0 +1,73 @@
+P12: EntityPanel redesign. Floating, draggable, stackable, pinnable cards.
+
+Replaces the current single fixed right-side panel with a multi-card system. Each click on an entity creates a new card. Cards can be pinned (persist across new selections), unpinned (auto-replaced by next click), free-dragged anywhere on screen, dismissed individually, and reordered.
+
+ARCHITECTURE:
+
+1. Store extension (store/index.ts):
+   - Replace selectedEntity: SelectedEntity | null with cards: EntityCard[]
+   - EntityCard = { cardId: string (uuid), entity: SelectedEntity, pinned: boolean, position: {x: number, y: number}, zIndex: number, collapsed: boolean }
+   - Actions:
+     - openCard(entity, opts?: {pinned?: boolean, position?: {x,y}}) — creates new card. Default position: top-right offset from any existing unpinned card by (0, 0); cascades down 30px per existing card. Default pinned: false.
+     - dismissCard(cardId) — removes by id
+     - togglePinCard(cardId)
+     - moveCard(cardId, x, y) — updates position
+     - bringCardToFront(cardId) — sets zIndex above all others
+     - toggleCollapseCard(cardId)
+     - replaceUnpinnedCards(entity) — removes all cards where pinned===false, then opens new card with entity
+
+2. Click → card creation flow:
+   - When central click handler resolves a SelectedEntity: call store.replaceUnpinnedCards(entity)
+   - This means: any unpinned cards close, a new card opens for the clicked entity. Pinned cards stay.
+   - If the user clicks the SAME entity that's already in a pinned card → no-op (don't duplicate). Match by entity.type + entity.id.
+   - Click empty space → no-op (don't dismiss anything; user uses the X button to dismiss)
+
+3. Card component (components/EntityCard.tsx — new file):
+   - Floating absolute-positioned div, position from store
+   - Draggable via header (mousedown on header → drag, mousemove → store.moveCard, mouseup → end). Drag uses pointer events. Constrain to viewport bounds (card cannot drag fully off-screen — clamp x/y so at least 80px of header remains visible).
+   - On any mousedown anywhere in the card → store.bringCardToFront(cardId) so clicked card is always on top.
+   - Header bar (16px tall):
+     - Left: entity type label in monospace amber (AIRCRAFT / VESSEL / SATELLITE / FIRE / AIRSPACE / QUAKE)
+     - Right: three buttons in this order — pin (📌 icon, fills when pinned), collapse (chevron up/down), dismiss (×). Icons monospace, ~12px.
+   - Body: existing EntityPanel content per type, unchanged. When collapsed === true, body hidden, header only.
+   - Width: 320px fixed. Height: auto. Max-height: 80vh with internal scroll if exceeded.
+   - Visual: dark bg matching existing panel style, 1px border, faint amber on pinned cards (#fbbf24 30% alpha border) vs neutral border on unpinned.
+
+4. Container (components/EntityCardStack.tsx — new file):
+   - Renders all store.cards as <EntityCard> children
+   - Mounted in App root next to <Viewer>
+   - z-index above globe, below modals (none currently)
+
+5. Initial card position math:
+   - First unpinned card: top-right corner, offset (24px right, 80px down) from viewport top-right
+   - Each new card cascades (30px right, 30px down) from the previous unpinned position
+   - Cap cascade at viewport edge — wrap back to start
+   - Pinned cards keep their last-dragged position
+   - On window resize: clamp all card positions to remain ≥80px on-screen (header reachable)
+
+6. Removed code:
+   - Old EntityPanel.tsx as a singleton mounted in App: REMOVE the singleton mount. Keep its per-type render bodies — they become the body content of EntityCard.
+   - Any code that reads store.selectedEntity for rendering: migrate to read store.cards[?].entity. The most-recently-opened card is cards[cards.length - 1].
+   - Click-to-fly logic (P10.5) currently reads store.selectedEntity for the satellite LOD selection bypass. UPDATE the selection bypass to look at ALL cards: a satellite is "selected" for LOD purposes if ANY card has entity.type==='satellite' && entity.id===noradId. This preserves the bypass guarantee for pinned satellites even when the latest card is a different entity type.
+
+7. Click-to-fly interaction:
+   - Click-to-fly continues to fire on every entity click (regardless of pin state of other cards). Theater coordination unchanged (isTheaterFlying still gates).
+   - If user clicks an entity already in a pinned card → no flyTo (treat as redundant), no new card.
+
+DEFINITION OF DONE:
+- Click aircraft → card appears top-right
+- Click vessel → aircraft card disappears (was unpinned), vessel card appears
+- Pin the vessel card (📌 fills) → click satellite → satellite card appears, vessel card stays
+- Drag vessel card to bottom-left → it stays there, can drag again
+- Click another satellite → vessel pinned card stays, prior satellite card replaced by new satellite card
+- Pin satellite card too → 2 pinned cards. Click 5 different aircraft in succession → only the latest aircraft card is shown, both satellites + vessel persist
+- Collapse a card → only header visible, can re-expand
+- Dismiss (×) → card gone
+- Click an entity that's already in a pinned card → no new card, no flyTo (redundant click)
+- Drag card off-screen edge → clamps so 80px of header remains visible
+- Resize window smaller → all card positions reclamp on-screen
+- Pinned satellite stays as glTF model in LOD even when another card is most recent (selection bypass holds)
+- Theater fly is not interrupted by clicks (theater priority unchanged)
+
+DO NOT TOUCH:
+- Theater system internals, restricted airspace, trails, fires/quakes/satellites/aircraft/vessels fetch logic, LOD math (only update selection-bypass read source from selectedEntity → cards array), click-to-fly targeting/predict/cancel logic (only update the redundant-click suppression check), tileset settings, server routes.

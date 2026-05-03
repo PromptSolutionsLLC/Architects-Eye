@@ -1,9 +1,14 @@
-import { useStore, type SelectedEntity } from "../store";
+import type { SelectedEntity } from "../store";
 import type { Aircraft, Fire, Quake } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
 import { decodeShipType } from "../ws/aisstream-client";
+
+// Per-type body renderers used inside the floating EntityCard. The
+// outer card supplies its own header (label + pin/collapse/dismiss
+// controls); these renderers contribute only the hero title and the
+// detail rows.
 
 function formatAlt(alt: Aircraft["alt_baro"]): string {
   if (alt === "ground" || alt == null) return "GND";
@@ -58,66 +63,15 @@ function Row({ label, value, accent }: RowProps) {
   );
 }
 
-function PanelHeader({
-  label,
-  onClose,
-}: {
-  label: string;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: "1.5rem",
-      }}
-    >
-      <span
-        style={{
-          color: "#22d3ee",
-          fontSize: "0.65rem",
-          letterSpacing: "0.2em",
-          textTransform: "uppercase",
-        }}
-      >
-        ▶ {label}
-      </span>
-      <button
-        onClick={onClose}
-        style={{
-          background: "transparent",
-          border: "none",
-          color: "#64748b",
-          cursor: "pointer",
-          fontSize: "1rem",
-          lineHeight: 1,
-          padding: "0.25rem 0.5rem",
-          transition: "color 0.15s",
-        }}
-        onMouseEnter={(e) =>
-          ((e.target as HTMLButtonElement).style.color = "#fff")
-        }
-        onMouseLeave={(e) =>
-          ((e.target as HTMLButtonElement).style.color = "#64748b")
-        }
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
 function HeroTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div style={{ marginBottom: "1.75rem" }}>
+    <div style={{ marginBottom: "1.5rem" }}>
       <div
         style={{
           color: "#fff",
-          fontSize: "1.6rem",
+          fontSize: "1.5rem",
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: "0.08em",
           lineHeight: 1.1,
           wordBreak: "break-word",
         }}
@@ -139,16 +93,9 @@ function HeroTitle({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function AircraftDetails({
-  ac,
-  onClose,
-}: {
-  ac: Aircraft;
-  onClose: () => void;
-}) {
+function AircraftDetails({ ac }: { ac: Aircraft }) {
   return (
     <>
-      <PanelHeader label="Aircraft" onClose={onClose} />
       <HeroTitle title={ac.flight?.trim() || "UNKNOWN"} subtitle="Callsign" />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <Row label="ICAO24" value={ac.hex.toUpperCase()} />
@@ -162,16 +109,9 @@ function AircraftDetails({
   );
 }
 
-function SatelliteDetails({
-  sat,
-  onClose,
-}: {
-  sat: SatelliteMeta;
-  onClose: () => void;
-}) {
+function SatelliteDetails({ sat }: { sat: SatelliteMeta }) {
   return (
     <>
-      <PanelHeader label="Satellite" onClose={onClose} />
       <HeroTitle title={sat.name || "UNKNOWN"} subtitle="Object name" />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <Row label="NORAD ID" value={sat.noradId || "—"} />
@@ -183,17 +123,10 @@ function SatelliteDetails({
   );
 }
 
-function VesselDetails({
-  v,
-  onClose,
-}: {
-  v: VesselSelectionData;
-  onClose: () => void;
-}) {
+function VesselDetails({ v }: { v: VesselSelectionData }) {
   const heroName = v.name && v.name.trim() ? v.name : `MMSI ${v.mmsi}`;
   return (
     <>
-      <PanelHeader label="Vessel" onClose={onClose} />
       <HeroTitle title={heroName} subtitle="Vessel name" />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <Row label="MMSI" value={String(v.mmsi)} />
@@ -219,16 +152,9 @@ function VesselDetails({
   );
 }
 
-function AirspaceDetails({
-  zone,
-  onClose,
-}: {
-  zone: RestrictedAirspaceZone;
-  onClose: () => void;
-}) {
+function AirspaceDetails({ zone }: { zone: RestrictedAirspaceZone }) {
   return (
     <>
-      <PanelHeader label="Restricted Airspace" onClose={onClose} />
       <HeroTitle title={zone.name} subtitle="Advisory" />
       <div
         style={{
@@ -282,7 +208,6 @@ function decodeFireConfidence(c: string, source: Fire["source"]): string {
     if (cl === "l") return "Low";
     return c || "—";
   }
-  // MODIS numeric
   const n = Number.parseFloat(c);
   if (!Number.isFinite(n)) return c || "—";
   if (n >= 70) return `High (${Math.round(n)}%)`;
@@ -291,26 +216,18 @@ function decodeFireConfidence(c: string, source: Fire["source"]): string {
 }
 
 function formatAcqTime(t: string): string {
-  // FIRMS uses HHMM zero-padded e.g. "0030" → "00:30 UTC"
   const padded = t.padStart(4, "0");
   if (padded.length !== 4) return t;
   return `${padded.slice(0, 2)}:${padded.slice(2)} UTC`;
 }
 
-function FireDetails({
-  fire,
-  onClose,
-}: {
-  fire: Fire;
-  onClose: () => void;
-}) {
+function FireDetails({ fire }: { fire: Fire }) {
   const lat = fire.lat.toFixed(4);
   const lon = fire.lon.toFixed(4);
   const sensor =
     fire.source === "VIIRS_SNPP_NRT" ? "VIIRS Suomi-NPP" : "MODIS C6.1";
   return (
     <>
-      <PanelHeader label="Wildfire" onClose={onClose} />
       <HeroTitle title="Active Fire Pixel" subtitle={sensor} />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <Row label="Coordinates" value={`${lat}, ${lon}`} />
@@ -335,25 +252,16 @@ function FireDetails({
 }
 
 function formatUtc(ms: number): string {
-  // "YYYY-MM-DD HH:MM:SS UTC" from epoch ms.
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "—";
-  const iso = d.toISOString(); // e.g. 2026-05-03T07:30:21.123Z
+  const iso = d.toISOString();
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
 }
 
-function QuakeDetails({
-  quake,
-  onClose,
-}: {
-  quake: Quake;
-  onClose: () => void;
-}) {
-  const heading = `M${quake.magnitude.toFixed(1)}`;
+function QuakeDetails({ quake }: { quake: Quake }) {
   return (
     <>
-      <PanelHeader label="Earthquake" onClose={onClose} />
-      <HeroTitle title={heading} subtitle="Magnitude" />
+      <HeroTitle title={`M${quake.magnitude.toFixed(1)}`} subtitle="Magnitude" />
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <Row label="Location" value={quake.place || "—"} />
         <Row label="Depth" value={`${quake.depth_km.toFixed(1)} km`} accent />
@@ -382,71 +290,28 @@ function QuakeDetails({
   );
 }
 
-function PanelBody({
-  selected,
-  onClose,
-}: {
-  selected: SelectedEntity;
-  onClose: () => void;
-}) {
-  if (selected.type === "aircraft") {
-    return <AircraftDetails ac={selected.data} onClose={onClose} />;
-  }
-  if (selected.type === "satellite") {
-    return <SatelliteDetails sat={selected.data} onClose={onClose} />;
-  }
-  if (selected.type === "airspace") {
-    return <AirspaceDetails zone={selected.data} onClose={onClose} />;
-  }
-  if (selected.type === "fire") {
-    return <FireDetails fire={selected.data} onClose={onClose} />;
-  }
-  if (selected.type === "quake") {
-    return <QuakeDetails quake={selected.data} onClose={onClose} />;
-  }
-  return <VesselDetails v={selected.data} onClose={onClose} />;
+export function EntityBody({ entity }: { entity: SelectedEntity }) {
+  if (entity.type === "aircraft") return <AircraftDetails ac={entity.data} />;
+  if (entity.type === "satellite") return <SatelliteDetails sat={entity.data} />;
+  if (entity.type === "vessel") return <VesselDetails v={entity.data} />;
+  if (entity.type === "airspace") return <AirspaceDetails zone={entity.data} />;
+  if (entity.type === "fire") return <FireDetails fire={entity.data} />;
+  return <QuakeDetails quake={entity.data} />;
 }
 
-export function EntityPanel() {
-  const selectedEntity = useStore((s) => s.selectedEntity);
-  const setSelectedEntity = useStore((s) => s.setSelectedEntity);
-
-  const visible = selectedEntity !== null;
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 40,
-        right: 0,
-        height: "calc(100% - 40px)",
-        width: "320px",
-        zIndex: 1050,
-        transform: visible ? "translateX(0)" : "translateX(100%)",
-        transition: "transform 0.28s cubic-bezier(0.4, 0, 0.2, 1)",
-        pointerEvents: visible ? "auto" : "none",
-        background: "rgba(15, 23, 42, 0.95)",
-        backdropFilter: "blur(12px)",
-        borderLeft: "1px solid rgba(34, 211, 238, 0.2)",
-        fontFamily: "monospace",
-      }}
-    >
-      {selectedEntity && (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            padding: "1.25rem",
-            overflowY: "auto",
-          }}
-        >
-          <PanelBody
-            selected={selectedEntity}
-            onClose={() => setSelectedEntity(null)}
-          />
-        </div>
-      )}
-    </div>
-  );
+export function entityHeaderLabel(entity: SelectedEntity): string {
+  switch (entity.type) {
+    case "aircraft":
+      return "AIRCRAFT";
+    case "satellite":
+      return "SATELLITE";
+    case "vessel":
+      return "VESSEL";
+    case "airspace":
+      return "AIRSPACE";
+    case "fire":
+      return "FIRE";
+    case "quake":
+      return "QUAKE";
+  }
 }

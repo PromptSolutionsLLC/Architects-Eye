@@ -1,6 +1,6 @@
 import * as Cesium from "cesium";
 import { fetchAircraft, type Aircraft } from "../utils/api";
-import { useStore } from "../store";
+import { useStore, latestSelectionOfType } from "../store";
 import { flyToInspect } from "../utils/click-to-fly";
 import {
   registerClickResolver,
@@ -95,11 +95,16 @@ export class AircraftLayer {
       }
     });
 
-    // Trail rendering: subscribe to selection changes
+    // Trail rendering: subscribe to card-stack changes. The trail
+    // follows the most-recently-opened aircraft card (if any). syncTrail
+    // is internally a no-op when the trailed hex hasn't changed, so it's
+    // safe to call on every store update.
     this.unsubscribeSelection = useStore.subscribe((state) => {
-      this.syncTrail(state.selectedEntity);
+      this.syncTrail(latestSelectionOfType(state.cards, "aircraft"));
     });
-    this.syncTrail(useStore.getState().selectedEntity);
+    this.syncTrail(
+      latestSelectionOfType(useStore.getState().cards, "aircraft"),
+    );
 
     void this.poll();
     this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
@@ -168,10 +173,9 @@ export class AircraftLayer {
   }
 
   private syncTrail(
-    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+    selected: { type: "aircraft"; id: string } | null,
   ): void {
-    const newHex =
-      selected && selected.type === "aircraft" ? selected.id : null;
+    const newHex = selected ? selected.id : null;
     if (newHex === this.trailedHex) return;
 
     // Clean up the old trail — only if WE put one there.

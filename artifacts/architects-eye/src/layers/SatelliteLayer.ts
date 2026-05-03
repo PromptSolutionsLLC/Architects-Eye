@@ -1,6 +1,6 @@
 import * as Cesium from "cesium";
 import * as satellite from "satellite.js";
-import { useStore } from "../store";
+import { useStore, latestSelectionOfType } from "../store";
 import {
   parseTLE,
   parseNoradId,
@@ -204,12 +204,15 @@ export class SatelliteLayer {
     });
 
     this.unsubscribeSelection = useStore.subscribe((state) => {
-      this.syncTrail(state.selectedEntity);
-      // Selection bypass: a selected satellite must always render as
-      // glTF, even when outside the distance threshold or beyond the cap.
+      // Trail follows the most-recently-opened satellite card.
+      this.syncTrail(latestSelectionOfType(state.cards, "satellite"));
+      // Selection bypass: every satellite present in any card (pinned
+      // or not) must render as glTF, regardless of distance or cap.
       this.evaluateLod();
     });
-    this.syncTrail(useStore.getState().selectedEntity);
+    this.syncTrail(
+      latestSelectionOfType(useStore.getState().cards, "satellite"),
+    );
 
     // Resolves both PointPrimitive picks (point-mode) and model Entity
     // picks (gltf-mode) to the same satIndex payload via resolveSatIndex.
@@ -344,11 +347,18 @@ export class SatelliteLayer {
     }, LOD_DEBOUNCE_MS);
   }
 
-  private getSelectedSatIndex(): number | null {
-    const sel = useStore.getState().selectedEntity;
-    if (!sel || sel.type !== "satellite") return null;
-    const idx = this.noradIdToIndex.get(sel.id);
-    return idx == null ? null : idx;
+  /** Set of indices for every satellite currently shown in any card.
+   *  All of them get the LOD bypass so pinned satellites stay rendered
+   *  as glTF even when another (non-satellite) card is most recent. */
+  private getSelectedSatIndices(): Set<number> {
+    const out = new Set<number>();
+    const cards = useStore.getState().cards;
+    for (const c of cards) {
+      if (c.entity.type !== "satellite") continue;
+      const idx = this.noradIdToIndex.get(c.entity.id);
+      if (idx != null) out.add(idx);
+    }
+    return out;
   }
 
   private evaluateLod(): void {
@@ -377,11 +387,11 @@ export class SatelliteLayer {
       candidates.slice(0, this.lodCap).map((c) => c.idx),
     );
 
-    // Selection bypass: ensure the currently-selected satellite always
-    // renders as glTF, regardless of distance or cap.
-    const selIdx = this.getSelectedSatIndex();
-    if (selIdx != null && this.currentPositions[selIdx]) {
-      wanted.add(selIdx);
+    // Selection bypass: ensure every satellite shown in a card (pinned
+    // or unpinned) always renders as glTF, regardless of distance or cap.
+    const selIndices = this.getSelectedSatIndices();
+    for (const idx of selIndices) {
+      if (this.currentPositions[idx]) wanted.add(idx);
     }
 
     // Remove models no longer in the wanted set.
@@ -486,10 +496,9 @@ export class SatelliteLayer {
   }
 
   private syncTrail(
-    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+    selected: { type: "satellite"; id: string; data: SatelliteMeta } | null,
   ): void {
-    const newId =
-      selected && selected.type === "satellite" ? selected.id : null;
+    const newId = selected ? selected.id : null;
     if (newId === this.trailedNoradId) return;
 
     if (this.trailEntity && !this.viewer.isDestroyed()) {
@@ -498,7 +507,7 @@ export class SatelliteLayer {
     this.trailEntity = null;
     this.trailedNoradId = null;
 
-    if (!newId || !selected || selected.type !== "satellite") return;
+    if (!newId || !selected) return;
     const meta = selected.data;
     const nowMs = Cesium.JulianDate.toDate(
       this.viewer.clock.currentTime,

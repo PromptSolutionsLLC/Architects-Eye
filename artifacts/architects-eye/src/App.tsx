@@ -1,5 +1,5 @@
 import Viewer from "./globe/Viewer";
-import { EntityPanel } from "./components/EntityPanel";
+import { EntityCardStack } from "./components/EntityCardStack";
 import { HeaderBar } from "./components/HeaderBar";
 import { LayerToggles } from "./components/LayerToggles";
 import { TheaterPanel } from "./components/TheaterPanel";
@@ -41,7 +41,7 @@ export default function App() {
         <TheaterPanel />
       </div>
 
-      <EntityPanel />
+      <EntityCardStack />
       <Timeline />
       <TheaterToast />
     </div>
