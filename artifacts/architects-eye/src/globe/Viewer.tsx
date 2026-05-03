@@ -67,7 +67,14 @@ export default function Viewer() {
       };
       viewer.scene.preUpdate.addEventListener(clearTracked);
 
-      viewer.scene.globe.enableLighting = true;
+      // Google Photoreal 3D Tiles are the world surface — the underlying
+      // Cesium ellipsoid globe must not render or it produces a seam where
+      // the photoreal mesh hasn't yet covered the view (blue ellipsoid
+      // bleeds through next to loaded photoreal terrain).
+      viewer.scene.globe.show = false;
+      // Likewise, drop the default Bing imagery layer so nothing competes
+      // with the Photoreal tileset for the world surface.
+      viewer.imageryLayers.removeAll();
       viewer.scene.skyAtmosphere.show = false;
 
       // Real-time clock for SampledPositionProperty interpolation
