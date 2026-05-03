@@ -159,7 +159,7 @@ export default function Viewer() {
             // [DIAGNOSTIC] Colorize photoreal tiles so we can visually
             // identify which parts of the view are covered by the tileset
             // vs. some other surface (globe, background, skybox).
-            (tileset as unknown as { debugColorizeTiles: boolean }).debugColorizeTiles = true;
+            (tileset as unknown as { debugColorizeTiles: boolean }).debugColorizeTiles = false;
 
             // [DIAGNOSTIC] Set background to magenta — if seam areas are
             // magenta, the tileset has a hole there. If they're blue, the
