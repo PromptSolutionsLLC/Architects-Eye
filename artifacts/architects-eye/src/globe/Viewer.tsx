@@ -176,7 +176,10 @@ export default function Viewer() {
             });
 
             // [DIAGNOSTIC] Tileset config dump
-            const t = tileset as unknown as Record<string, unknown>;
+            const t = tileset as unknown as Record<string, unknown> & {
+              boundingSphere?: { radius: number };
+              root?: { geometricError?: number };
+            };
             console.log("[TILESET CONFIG]", {
               maximumScreenSpaceError: t.maximumScreenSpaceError,
               maximumMemoryUsage: t.maximumMemoryUsage,
@@ -186,6 +189,8 @@ export default function Viewer() {
               dynamicScreenSpaceErrorFactor: t.dynamicScreenSpaceErrorFactor,
               preloadWhenHidden: t.preloadWhenHidden,
               preloadFlightDestinations: t.preloadFlightDestinations,
+              boundingSphereRadius: t.boundingSphere?.radius,
+              rootGeometricError: t.root?.geometricError,
             });
 
             // [DIAGNOSTIC] Tile failures
@@ -195,7 +200,7 @@ export default function Viewer() {
               },
             );
 
-            // [DIAGNOSTIC] 5s interval stats dump
+            // [DIAGNOSTIC] 3s interval stats dump (extended)
             const statsTimer = setInterval(() => {
               const v = viewerRef.current;
               if (!v || v.isDestroyed()) {
@@ -203,14 +208,18 @@ export default function Viewer() {
                 return;
               }
               const s = (tileset as unknown as { statistics: Record<string, number> }).statistics;
+              const fs = (v.scene as unknown as { frameState?: { frustumCommandsList?: unknown[] } }).frameState;
               console.log("[TILESET STATS]", {
                 ready: s.numberOfTilesWithContentReady,
                 pending: s.numberOfPendingRequests,
                 attempted: s.numberOfAttemptedRequests,
+                culledChildrenUnion: s.numberOfTilesCulledWithChildrenUnion,
+                processing: s.numberOfTilesProcessing,
                 cameraAltM: Math.round(v.camera.positionCartographic.height),
+                frustumCmds: fs?.frustumCommandsList?.length ?? null,
                 fps: lastFps,
               });
-            }, 5000);
+            }, 3000);
           }
         } catch (err) {
           console.error("Failed to load Google Photorealistic 3D Tiles:", err);
