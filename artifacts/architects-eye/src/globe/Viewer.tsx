@@ -156,6 +156,25 @@ export default function Viewer() {
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
 
+            // [DIAGNOSTIC] Colorize photoreal tiles so we can visually
+            // identify which parts of the view are covered by the tileset
+            // vs. some other surface (globe, background, skybox).
+            (tileset as unknown as { debugColorizeTiles: boolean }).debugColorizeTiles = true;
+
+            // [DIAGNOSTIC] Set background to magenta — if seam areas are
+            // magenta, the tileset has a hole there. If they're blue, the
+            // blue is being drawn by something else (globe, atmosphere).
+            viewerRef.current.scene.backgroundColor = Cesium.Color.MAGENTA;
+
+            // [DIAGNOSTIC] Re-confirm globe + imagery state at runtime in
+            // case HMR didn't apply the earlier setting.
+            console.log("[GLOBE STATE]", {
+              globeShow: viewerRef.current.scene.globe.show,
+              imageryLayerCount: viewerRef.current.imageryLayers.length,
+              skyAtmosphereShow: viewerRef.current.scene.skyAtmosphere?.show,
+              backgroundColor: viewerRef.current.scene.backgroundColor.toString(),
+            });
+
             // [DIAGNOSTIC] Tileset config dump
             const t = tileset as unknown as Record<string, unknown>;
             console.log("[TILESET CONFIG]", {
