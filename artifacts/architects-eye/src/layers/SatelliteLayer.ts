@@ -227,7 +227,13 @@ export class SatelliteLayer {
         });
         const pos = this.currentPositions[satIndex];
         if (pos) {
-          flyToInspect(this.viewer, pos, "satellite");
+          flyToInspect(this.viewer, pos, "satellite", {
+            predict: {
+              noradId: meta.noradId,
+              line1: meta.line1,
+              line2: meta.line2,
+            },
+          });
         } else {
           console.warn("[CLICK FLY SKIP] type=satellite id=" +
             meta.noradId + " reason=no_position");
