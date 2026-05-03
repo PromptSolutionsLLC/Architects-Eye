@@ -4,6 +4,7 @@ import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { BBox } from "../ws/aisstream-client";
 import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
+import type { CableMeta } from "../layers/SubmarineCablesLayer";
 
 export type SelectedEntity =
   | { type: "aircraft"; id: string; data: Aircraft }
@@ -11,7 +12,8 @@ export type SelectedEntity =
   | { type: "vessel"; id: string; data: VesselSelectionData }
   | { type: "airspace"; id: string; data: RestrictedAirspaceZone }
   | { type: "fire"; id: string; data: Fire }
-  | { type: "quake"; id: string; data: Quake };
+  | { type: "quake"; id: string; data: Quake }
+  | { type: "cable"; id: string; data: CableMeta };
 
 export interface EntityCard {
   cardId: string;
@@ -35,6 +37,7 @@ export type LayerKey =
   | "satellites"
   | "jamming"
   | "restrictedAirspace"
+  | "submarineCables"
   | "fires"
   | "quakes";
 
@@ -294,6 +297,7 @@ export const useStore = create<AppStore>((set, get) => ({
     satellites: true,
     jamming: false,
     restrictedAirspace: true,
+    submarineCables: false,
     fires: false,
     quakes: false,
   },
@@ -308,6 +312,7 @@ export const useStore = create<AppStore>((set, get) => ({
     satellites: true,
     jamming: true,
     restrictedAirspace: true,
+    submarineCables: false,
     fires: true,
     quakes: false,
   },
@@ -322,6 +327,7 @@ export const useStore = create<AppStore>((set, get) => ({
     satellites: 0,
     jamming: 0,
     restrictedAirspace: 0,
+    submarineCables: 0,
     fires: 0,
     quakes: 0,
   },

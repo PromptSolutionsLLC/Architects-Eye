@@ -3,6 +3,7 @@ import type { Aircraft, Fire, Quake } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
+import type { CableMeta } from "../layers/SubmarineCablesLayer";
 import { decodeShipType } from "../ws/aisstream-client";
 
 // Per-type body renderers used inside the floating EntityCard. The
@@ -290,12 +291,55 @@ function QuakeDetails({ quake }: { quake: Quake }) {
   );
 }
 
+function CableDetails({ cable }: { cable: CableMeta }) {
+  const hex = cable.color.toUpperCase();
+  return (
+    <>
+      <HeroTitle title={cable.name} subtitle="Submarine fiber-optic cable" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="Name" value={cable.name} />
+        <Row label="Slug" value={cable.id || "—"} />
+        <div className="border-b border-slate-800/80 pb-3">
+          <div className="text-slate-500 text-xs tracking-widest uppercase mb-1">
+            Color
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.625rem",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                display: "inline-block",
+                width: 14,
+                height: 14,
+                borderRadius: 2,
+                background: cable.color,
+                boxShadow: `0 0 6px ${cable.color}`,
+                border: "1px solid rgba(148, 163, 184, 0.35)",
+                flexShrink: 0,
+              }}
+            />
+            <span className="font-mono text-sm tracking-wide text-slate-200">
+              {hex}
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function EntityBody({ entity }: { entity: SelectedEntity }) {
   if (entity.type === "aircraft") return <AircraftDetails ac={entity.data} />;
   if (entity.type === "satellite") return <SatelliteDetails sat={entity.data} />;
   if (entity.type === "vessel") return <VesselDetails v={entity.data} />;
   if (entity.type === "airspace") return <AirspaceDetails zone={entity.data} />;
   if (entity.type === "fire") return <FireDetails fire={entity.data} />;
+  if (entity.type === "cable") return <CableDetails cable={entity.data} />;
   return <QuakeDetails quake={entity.data} />;
 }
 
@@ -313,5 +357,7 @@ export function entityHeaderLabel(entity: SelectedEntity): string {
       return "FIRE";
     case "quake":
       return "QUAKE";
+    case "cable":
+      return "SUBMARINE CABLE";
   }
 }

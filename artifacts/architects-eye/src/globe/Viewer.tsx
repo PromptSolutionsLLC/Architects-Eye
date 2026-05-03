@@ -6,6 +6,7 @@ import { SatelliteLayer } from "../layers/SatelliteLayer";
 import { VesselLayer } from "../layers/VesselLayer";
 import { JammingLayer } from "../layers/JammingLayer";
 import { RestrictedAirspaceLayer } from "../layers/RestrictedAirspaceLayer";
+import { SubmarineCablesLayer } from "../layers/SubmarineCablesLayer";
 import { FiresLayer } from "../layers/FiresLayer";
 import { QuakesLayer } from "../layers/QuakesLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
@@ -30,6 +31,7 @@ export default function Viewer() {
   const restrictedAirspaceLayerRef = useRef<RestrictedAirspaceLayer | null>(
     null,
   );
+  const submarineCablesLayerRef = useRef<SubmarineCablesLayer | null>(null);
   const firesLayerRef = useRef<FiresLayer | null>(null);
   const quakesLayerRef = useRef<QuakesLayer | null>(null);
   const aisClientRef = useRef<AISStreamClient | null>(null);
@@ -207,6 +209,11 @@ export default function Viewer() {
       restrictedAirspaceLayerRef.current = restrictedAirspaceLayer;
       void restrictedAirspaceLayer.mount();
 
+      // Submarine fiber-optic cable network (static GeoJSON)
+      const submarineCablesLayer = new SubmarineCablesLayer(viewer);
+      submarineCablesLayerRef.current = submarineCablesLayer;
+      void submarineCablesLayer.mount();
+
       // FIRMS wildfire layer (live VIIRS, MODIS fallback)
       const firesLayer = new FiresLayer(viewer);
       firesLayerRef.current = firesLayer;
@@ -280,6 +287,8 @@ export default function Viewer() {
       quakesLayerRef.current = null;
       firesLayerRef.current?.destroy();
       firesLayerRef.current = null;
+      submarineCablesLayerRef.current?.destroy();
+      submarineCablesLayerRef.current = null;
       restrictedAirspaceLayerRef.current?.destroy();
       restrictedAirspaceLayerRef.current = null;
       jammingLayerRef.current?.destroy();

@@ -22,6 +22,13 @@ const LAYERS: LayerSpec[] = [
     color: "#ef4444",
     enabled: true,
   },
+  {
+    key: "submarineCables",
+    label: "Cables",
+    color: "#5eead4",
+    enabled: true,
+    showLoadingPlaceholder: true,
+  },
   { key: "fires", label: "Fires", color: "#f97316", enabled: true },
   {
     key: "quakes",

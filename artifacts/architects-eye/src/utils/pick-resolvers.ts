@@ -26,6 +26,7 @@ export type ClickResolver = (picked: unknown) => ClickResult | null;
 
 const CLICK_PRIORITY = [
   "airspace",
+  "cable",
   "fire",
   "quake",
   "satellite",
