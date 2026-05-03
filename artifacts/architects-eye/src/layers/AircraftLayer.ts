@@ -553,6 +553,10 @@ export class AircraftLayer {
       // Outpaced by another scrub event — its scheduled render will run.
       return;
     }
+    console.log("[REPLAY RENDER]", {
+      replayTs: ts,
+      positionsRendered: positions.size,
+    });
 
     // Diff: remove entries no longer in the buffer view.
     for (const hex of [...this.entries.keys()]) {

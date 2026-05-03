@@ -88,18 +88,33 @@ export async function getPositionsAtTime(
   timestamp_ms: number,
 ): Promise<Map<string, AircraftBufferRecord>> {
   const db = await openDb();
+  // Diagnostic: capture buffer range alongside the query so we can
+  // tell whether zero-result queries are caused by a too-tight window
+  // or by the buffer simply not containing the queried timestamp.
+  const bufferRange = await getBufferRange();
   return new Promise((resolve, reject) => {
     const result = new Map<string, AircraftBufferRecord>();
     const tx = db.transaction(STORE_NAME, "readonly");
     const idx = tx.objectStore(STORE_NAME).index("timestamp_ms");
-    const range = IDBKeyRange.bound(
-      timestamp_ms - REPLAY_PRESENCE_WINDOW_MS,
-      timestamp_ms,
-    );
+    const windowStart = timestamp_ms - REPLAY_PRESENCE_WINDOW_MS;
+    const windowEnd = timestamp_ms;
+    const range = IDBKeyRange.bound(windowStart, windowEnd);
     const cursorReq = idx.openCursor(range, "prev");
     cursorReq.onsuccess = () => {
       const cursor = cursorReq.result;
       if (!cursor) {
+        console.log("[BUFFER QUERY]", {
+          queryTs: timestamp_ms,
+          windowStart,
+          windowEnd,
+          recordsFound: result.size,
+          bufferRange: bufferRange
+            ? {
+                earliest: bufferRange.earliest_ms,
+                latest: bufferRange.latest_ms,
+              }
+            : null,
+        });
         resolve(result);
         return;
       }
