@@ -51,6 +51,13 @@ export interface TheaterToast {
   triggerId: number;
 }
 
+export type PlaybackMode = "live" | "replay";
+
+export interface BufferRange {
+  earliest_ms: number;
+  latest_ms: number;
+}
+
 export const CARD_WIDTH = 320;
 const CARD_TOP_OFFSET = 80;
 const CARD_RIGHT_MARGIN = 24;
@@ -100,6 +107,19 @@ interface AppStore {
 
   isTheaterFlying: boolean;
   setTheaterFlying: (flying: boolean) => void;
+
+  // ── Replay scrubber (P13) ───────────────────────────────────────
+  playbackMode: PlaybackMode;
+  replayTimestamp_ms: number | null;
+  replaySpeed: 1 | 2;
+  replayPlaying: boolean;
+  bufferRange: BufferRange | null;
+  enterReplay: (timestamp_ms: number) => void;
+  exitReplay: () => void;
+  setReplayTimestamp: (ms: number) => void;
+  setReplaySpeed: (s: 1 | 2) => void;
+  togglePlayPause: () => void;
+  setBufferRange: (range: BufferRange | null) => void;
 }
 
 let toastCounter = 0;
@@ -348,4 +368,27 @@ export const useStore = create<AppStore>((set, get) => ({
 
   isTheaterFlying: false,
   setTheaterFlying: (flying) => set({ isTheaterFlying: flying }),
+
+  playbackMode: "live",
+  replayTimestamp_ms: null,
+  replaySpeed: 1,
+  replayPlaying: false,
+  bufferRange: null,
+  enterReplay: (timestamp_ms) =>
+    set({
+      playbackMode: "replay",
+      replayTimestamp_ms: timestamp_ms,
+      replayPlaying: false,
+    }),
+  exitReplay: () =>
+    set({
+      playbackMode: "live",
+      replayTimestamp_ms: null,
+      replayPlaying: false,
+    }),
+  setReplayTimestamp: (ms) => set({ replayTimestamp_ms: ms }),
+  setReplaySpeed: (s) => set({ replaySpeed: s }),
+  togglePlayPause: () =>
+    set((state) => ({ replayPlaying: !state.replayPlaying })),
+  setBufferRange: (range) => set({ bufferRange: range }),
 }));

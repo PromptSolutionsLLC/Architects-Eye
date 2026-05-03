@@ -8,14 +8,6 @@ function formatUtc(d: Date): string {
   return `${hh}:${mm}:${ss}Z`;
 }
 
-function formatReplay(offsetMs: number): string {
-  const totalMin = Math.floor(offsetMs / 60_000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h > 0) return `-${h}h ${m}m`;
-  return `-${m}m`;
-}
-
 function Logo() {
   return (
     <svg
@@ -42,7 +34,7 @@ function Logo() {
 }
 
 export function HeaderBar() {
-  const timeOffsetMs = useStore((s) => s.timeOffsetMs);
+  const playbackMode = useStore((s) => s.playbackMode);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -50,7 +42,7 @@ export function HeaderBar() {
     return () => clearInterval(id);
   }, []);
 
-  const isLive = timeOffsetMs <= 0;
+  const isLive = playbackMode === "live";
 
   return (
     <div
@@ -93,7 +85,7 @@ export function HeaderBar() {
           ) : (
             <div className="flex items-center gap-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2 py-[3px] font-mono text-[11px] tracking-widest text-amber-300">
               <span className="text-amber-400">●</span>
-              <span>REPLAY {formatReplay(timeOffsetMs)}</span>
+              <span>REPLAY</span>
             </div>
           )}
           <span className="font-mono text-[12px] tracking-widest text-slate-300">

@@ -5,8 +5,12 @@ import { LayerToggles } from "./components/LayerToggles";
 import { TheaterPanel } from "./components/TheaterPanel";
 import { TheaterToast } from "./components/TheaterToast";
 import { Timeline } from "./components/Timeline";
+import { useReplayTick } from "./hooks/useReplayTick";
+import { useStore } from "./store";
 
 export default function App() {
+  useReplayTick();
+  const isReplay = useStore((s) => s.playbackMode === "replay");
   return (
     <div
       style={{
@@ -18,6 +22,21 @@ export default function App() {
       }}
     >
       <Viewer />
+
+      {/* Subtle amber border around the viewport when in replay mode */}
+      {isReplay && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            border: "1px solid rgba(251, 191, 36, 0.85)",
+            boxShadow: "inset 0 0 24px rgba(251, 191, 36, 0.15)",
+            pointerEvents: "none",
+            zIndex: 1300,
+          }}
+        />
+      )}
 
       <HeaderBar />
 
