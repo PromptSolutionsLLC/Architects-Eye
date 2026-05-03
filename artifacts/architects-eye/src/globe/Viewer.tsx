@@ -94,14 +94,27 @@ export default function Viewer() {
       };
       viewer.scene.preUpdate.addEventListener(clearTracked);
 
-      // Google Photoreal 3D Tiles are the world surface — the underlying
-      // Cesium ellipsoid globe must not render or it produces a seam where
-      // the photoreal mesh hasn't yet covered the view (blue ellipsoid
-      // bleeds through next to loaded photoreal terrain).
-      viewer.scene.globe.show = false;
-      // Likewise, drop the default Bing imagery layer so nothing competes
-      // with the Photoreal tileset for the world surface.
+      // Surface rendering strategy:
+      //  - Google Photoreal 3D Tiles only cover land / cities (no mesh
+      //    over open ocean or undeveloped areas).
+      //  - We therefore keep the ellipsoid globe ON with high-quality
+      //    Cesium World Imagery as the fallback surface. PR3DT tiles
+      //    render OVER the imagery where they have coverage, so users
+      //    see photoreal cities AND satellite-imagery oceans / wilderness.
+      //  - The earlier "blue ellipsoid seam" concern is resolved by
+      //    swapping the default flat ellipsoid for satellite imagery —
+      //    photoreal mesh blends seamlessly into satellite imagery.
       viewer.imageryLayers.removeAll();
+      (async () => {
+        try {
+          const worldImagery = await Cesium.createWorldImageryAsync();
+          if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+            viewerRef.current.imageryLayers.addImageryProvider(worldImagery);
+          }
+        } catch (err) {
+          console.error("Failed to load Cesium World Imagery:", err);
+        }
+      })();
 
       // P15 — Cinematic atmosphere. The earlier seam concern is moot
       // now that Photoreal tiles fully cover the framed area. All
@@ -192,11 +205,21 @@ export default function Viewer() {
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
-            // Disable dynamic SSE — slightly fewer tile requests, no
-            // visible quality impact for our use case (theaters use
-            // top-down / near-vertical angles where dynamic SSE doesn't
-            // help). Default maximumScreenSpaceError (16) retained.
-            tileset.dynamicScreenSpaceError = false;
+            // Quality polish:
+            //  - dynamicScreenSpaceError ON: prioritize tile detail near
+            //    the camera and progressively reduce it for distant
+            //    horizon tiles. Eliminates the "uniformly mid-LOD"
+            //    look during free exploration.
+            //  - preloadWhenHidden + preloadFlightDestinations: warm
+            //    the cache during theater fly-tos so the framed area
+            //    is sharp the moment the camera arrives.
+            //  - cacheBytes bumped to 1 GB so panning around a region
+            //    doesn't constantly re-request tiles you just left.
+            tileset.dynamicScreenSpaceError = true;
+            tileset.preloadWhenHidden = true;
+            tileset.preloadFlightDestinations = true;
+            tileset.cacheBytes = 1_073_741_824; // 1 GB
+            tileset.maximumCacheOverflowBytes = 536_870_912; // 512 MB
           }
         } catch (err) {
           console.error("Failed to load Google Photorealistic 3D Tiles:", err);
