@@ -46,19 +46,45 @@ export function isTheaterFlying(): boolean {
 
 // Module state for cancellation of in-flight fly's. Only one
 // click-to-fly is allowed at a time; a new click cancels the prior.
-let activeTempEntity: Cesium.Entity | null = null;
 let activeViewer: Cesium.Viewer | null = null;
 
 function cancelActiveFly(): void {
   if (activeViewer && !activeViewer.isDestroyed()) {
-    // Cancels the underlying camera.flyToBoundingSphere animation.
     activeViewer.camera.cancelFlight();
-    if (activeTempEntity) {
-      activeViewer.entities.remove(activeTempEntity);
-    }
   }
-  activeTempEntity = null;
   activeViewer = null;
+}
+
+/**
+ * Compute the camera world position that, when oriented at the given
+ * heading/pitch, places `target` `range` meters in front of the camera.
+ *
+ * Uses the local east-north-up frame at `target` so the offset behaves
+ * correctly anywhere on the globe. The look vector in ENU coordinates
+ * is (cosP·sinH, cosP·cosH, sinP); the camera sits along its inverse
+ * at distance `range`.
+ */
+function computeOffsetCameraPosition(
+  target: Cesium.Cartesian3,
+  heading: number,
+  pitch: number,
+  range: number,
+): Cesium.Cartesian3 {
+  const transform = Cesium.Transforms.eastNorthUpToFixedFrame(target);
+  const cosP = Math.cos(pitch);
+  const sinP = Math.sin(pitch);
+  const sinH = Math.sin(heading);
+  const cosH = Math.cos(heading);
+  const offsetLocal = new Cesium.Cartesian3(
+    -range * cosP * sinH,
+    -range * cosP * cosH,
+    -range * sinP,
+  );
+  return Cesium.Matrix4.multiplyByPoint(
+    transform,
+    offsetLocal,
+    new Cesium.Cartesian3(),
+  );
 }
 
 /**
@@ -114,8 +140,12 @@ function predictSatellitePosition(
 
 /**
  * Fly the camera to an inspection vantage of the given world-space point.
- * Uses a temporary hidden Entity + viewer.flyTo so the camera controller
- * remains user-interruptible (drag/scroll cancels the fly cleanly).
+ * Uses viewer.camera.flyTo({destination, orientation}) directly — the
+ * same primitive theater-fly uses. The earlier temp-entity +
+ * viewer.flyTo approach silently no-op'd because a hidden point's
+ * bounding sphere has near-zero radius, which collapses the
+ * computed flyToBoundingSphere destination onto the target itself.
+ *
  * Suppressed when a theater flythrough is in progress.
  *
  * For satellites, opts.predict enables forward propagation by 1.5s so
@@ -145,35 +175,34 @@ export function flyToInspect(
   }
 
   const { pitchRad, rangeM } = PARAMS[type];
+  const heading = 0;
+  const destination = computeOffsetCameraPosition(
+    target,
+    heading,
+    pitchRad,
+    rangeM,
+  );
 
-  const temp = viewer.entities.add({
-    position: target,
-    point: {
-      pixelSize: 1,
-      color: Cesium.Color.TRANSPARENT,
-      show: false,
-    },
-  });
-  activeTempEntity = temp;
   activeViewer = viewer;
-
-  const cleanup = () => {
-    if (!viewer.isDestroyed()) {
-      viewer.entities.remove(temp);
-    }
-    if (activeTempEntity === temp) {
-      activeTempEntity = null;
-      activeViewer = null;
-    }
+  const clearActive = () => {
+    if (activeViewer === viewer) activeViewer = null;
   };
 
-  viewer
-    .flyTo(temp, {
-      duration: FLY_DURATION_S,
-      offset: new Cesium.HeadingPitchRange(0, pitchRad, rangeM),
-    })
-    .then(cleanup, cleanup);
-  console.log("[FLY INVOKED]", type, "flyTo called with target:", target);
+  viewer.camera.flyTo({
+    destination,
+    orientation: { heading, pitch: pitchRad, roll: 0 },
+    duration: FLY_DURATION_S,
+    complete: clearActive,
+    cancel: clearActive,
+  });
+  console.log(
+    "[FLY INVOKED]",
+    type,
+    "flyTo called with target:",
+    target,
+    "destination:",
+    destination,
+  );
 }
 
 /**

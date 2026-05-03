@@ -13,24 +13,43 @@ const cache = new Map<string, CacheEntry>();
 // In-flight deduplication: concurrent requests for the same key share one fetch
 const inFlight = new Map<string, Promise<unknown>>();
 
+async function fetchOne(url: string): Promise<unknown> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "architects-eye/1.0" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  console.log("[AIRCRAFT UPSTREAM]", url, "status:", res.status);
+  if (!res.ok) {
+    throw new Error(`upstream HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 async function fetchUpstream(
   key: string,
-  url: string,
+  primaryUrl: string,
+  fallbackUrl: string,
 ): Promise<unknown> {
   const existing = inFlight.get(key);
   if (existing) return existing;
 
   const promise = (async () => {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "architects-eye/1.0" },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) {
-      throw new Error(`adsb.lol returned HTTP ${res.status}`);
+    try {
+      const data = await fetchOne(primaryUrl);
+      cache.set(key, { data, fetchedAt: Date.now() });
+      return data;
+    } catch (primaryErr) {
+      console.log(
+        "[AIRCRAFT FALLBACK]",
+        "attempting adsb.fi",
+        "(primary err:",
+        primaryErr instanceof Error ? primaryErr.message : String(primaryErr),
+        ")",
+      );
+      const data = await fetchOne(fallbackUrl);
+      cache.set(key, { data, fetchedAt: Date.now() });
+      return data;
     }
-    const data = await res.json();
-    cache.set(key, { data, fetchedAt: Date.now() });
-    return data;
   })().finally(() => {
     inFlight.delete(key);
   });
@@ -68,29 +87,39 @@ router.get("/aircraft", async (req, res) => {
     return;
   }
 
-  const upstreamUrl = `https://api.adsb.lol/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
+  const adsbLolUrl = `https://api.adsb.lol/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
+  // adsb.fi v2 uses the same path schema and returns the same { ac: [...] } shape.
+  const adsbFiUrl = `https://api.adsb.fi/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
 
   try {
-    const data = await fetchUpstream(key, upstreamUrl);
+    const data = await fetchUpstream(key, adsbLolUrl, adsbFiUrl);
     res.json(data);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    req.log.error({ err, key }, "upstream fetch failed");
+    req.log.error({ err, key }, "all aircraft upstreams failed");
 
-    // Serve stale cache rather than a hard 502
-    if (cached && now - cached.fetchedAt < CACHE_STALE_MS) {
-      req.log.warn(
-        { key, ageMs: now - cached.fetchedAt },
-        "serving stale cache after upstream error",
-      );
+    // Serve stale cache rather than a hard 502 — even if older than
+    // CACHE_STALE_MS, since both upstreams are down anything is better
+    // than empty.
+    if (cached) {
+      const staleAge = now - cached.fetchedAt;
+      console.log("[AIRCRAFT STALE]", "returning stale cache, age_ms:", staleAge);
       res.json(cached.data);
       return;
     }
 
-    res.status(502).json({
-      error: "upstream unreachable",
+    console.log(
+      "[AIRCRAFT UPSTREAM TOTAL FAILURE]",
+      "key:",
+      key,
+      "detail:",
       detail,
+    );
+    // 200 with empty list + source marker so client doesn't crash and
+    // the layer just shows zero aircraft until upstreams recover.
+    res.status(200).json({
       ac: [],
+      source: "upstream-down",
     });
   }
 });
