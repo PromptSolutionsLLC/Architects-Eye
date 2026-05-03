@@ -1,0 +1,60 @@
+P12.5: Submarine cable layer. Static data. Visually distinctive.
+
+Goal: render the world's submarine fiber-optic cable network on the globe as glowing polylines. Toggleable layer. Click a cable → EntityPanel card with metadata.
+
+DATA SOURCE:
+- TeleGeography publishes a public GeoJSON of submarine cables: https://github.com/telegeography/www.submarinecablemap.com/blob/master/web/public/api/v3/cable/cable-geo.json
+- Bundle the JSON into the project at public/data/submarine-cables.geojson — fetch the raw file at build time OR commit it directly. Do NOT fetch at runtime (we want zero network dependency for this layer).
+- ~500 cables, ~25k coordinate points total. File size ~2-4MB. Acceptable.
+- GeoJSON FeatureCollection. Each Feature: geometry.type === "MultiLineString", geometry.coordinates is array of [lon, lat] arrays. properties: { name, slug, color (telegeography assigns a per-cable hex), ... }
+- Use TeleGeography's per-cable color as-is (each cable is rendered in its own hue, which is part of the visual signature of submarinecablemap.com — looks gorgeous and avoids us picking 500 colors).
+
+STATIC ASSET BUNDLING:
+- Place file at public/data/submarine-cables.geojson
+- Confirm Vite serves /data/* statically in dev and bundles it into prod build (mirror MODIS_C6_1_Global_24h.csv pattern).
+
+CLIENT LAYER (src/layers/SubmarineCablesLayer.ts):
+
+1. On mount, fetch /data/submarine-cables.geojson (static asset, served by Vite dev/prod).
+
+2. Render each cable as a Cesium PolylineCollection entry (single PolylineCollection for the whole layer for perf — not 500 separate primitives):
+   - For each MultiLineString, iterate sub-lines. Each sub-line becomes one polyline.
+   - positions: Cesium.Cartesian3.fromDegreesArray(flattened [lon, lat] pairs). Height implicit 0 (sea floor approximation; cables hug the seabed but rendering at surface is fine and matches submarinecablemap.com).
+   - width: 1.5
+   - material: Cesium.Material.fromType('PolylineGlow', { color: Cesium.Color.fromCssColorString(cable.color || '#5eead4'), glowPower: 0.25, taperPower: 1.0 })
+   - Stamp cable metadata on the polyline via a Map<polylineId, cableMeta> kept in the layer (PolylineCollection primitives don't accept arbitrary .id like PointPrimitive does — use a parallel Map keyed by polyline reference or index).
+
+3. Subscribe to store.layerVisibility.submarineCables — toggle PolylineCollection.show.
+
+4. Default store.layerVisibility.submarineCables = false (off).
+
+5. Click pick-resolver registration (per P11 architecture):
+   - Resolver: input picked object → if picked.primitive instanceof Polyline AND the Polyline belongs to the SubmarineCablesLayer's PolylineCollection, look up cable metadata in the layer's Map → return { type: 'cable', id: cable.slug, data: { name, slug, color, length_km?: undefined } }; else null.
+   - Resolver priority slot: insert between airspace and fire (airspace → cable → fire → quake → satellite → aircraft → vessel). Cables are large surface features, prioritize before point-based layers.
+
+6. NO click-to-fly for cables. Cables span thousands of km — flying to "the cable" has no useful inspection vantage. EntityPanel opens, no camera move. Add 'cable' to the click-to-fly EXCLUSION list (joins airspace and jamming).
+
+ENTITYPANEL TYPE EXTENSION (components/EntityPanel.tsx, EntityBody for type 'cable'):
+- Header: "SUBMARINE CABLE"
+- NAME: cable.name
+- SLUG: cable.slug
+- COLOR: rendered as a small swatch + hex value
+- (Length and landing points are not in the basic GeoJSON properties; skip those fields)
+
+LAYER TOGGLES (components/LayerToggles.tsx):
+- Add new row: "Cables", count = number of cables loaded ("---" while loading)
+- Color dot: teal (#5eead4) — matches the predominant cable hue and our existing trail color, signals "marine"
+- Insert row between "Airspace" and "Fires"
+
+DEFINITION OF DONE:
+- /data/submarine-cables.geojson loads on mount, ~500 cables parsed
+- Toggle "Cables" on → glowing multicolored lines visible across all oceans, dense in North Atlantic / Trans-Pacific / Mediterranean / SE Asia
+- Click a cable line → EntityPanel card opens with NAME / SLUG / COLOR swatch
+- No click-to-fly fires (camera does not move on cable click)
+- Cables visible at globe scale AND at theater zoom levels (PolylineGlow material visible across distances)
+- Toggle off → all cables hide
+- Performance: layer ON does not drop FPS below 90 at globe scale (we have 165 FPS headroom from earlier measurement)
+- Layer toggle shows "500" (or actual count) after load
+
+DO NOT TOUCH:
+- Theater system, restricted airspace, fires, quakes, satellites, aircraft, vessels, trails, LOD math, click-to-fly logic for other types (only ADD 'cable' to exclusion list), tileset settings, server routes (this is a pure static-asset client layer).
