@@ -62,6 +62,11 @@ export interface VesselSelectionData {
   destination: string;
   sog: number;
   cog: number;
+  // Last-known geographic position. Populated for fly-to (camera
+  // dispatch in click-to-fly.ts/flyToSelected) — entry.lastPos is
+  // always defined when buildClickResult succeeds.
+  lat: number;
+  lon: number;
 }
 
 interface Entry {
@@ -177,6 +182,8 @@ export class VesselLayer {
       destination: sd?.destination ?? "",
       sog: entry.lastPos.sog,
       cog: entry.lastPos.cog,
+      lat: entry.lastPos.lat,
+      lon: entry.lastPos.lon,
     };
     return {
       selected: { type: "vessel", id: String(mmsi), data },

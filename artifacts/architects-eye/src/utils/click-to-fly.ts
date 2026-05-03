@@ -1,6 +1,6 @@
 import * as Cesium from "cesium";
 import * as satellite from "satellite.js";
-import { useStore } from "../store";
+import { useStore, type SelectedEntity } from "../store";
 
 const FLY_DURATION_S = 1.5;
 
@@ -173,4 +173,124 @@ export function flyToInspect(
       offset: new Cesium.HeadingPitchRange(0, pitchRad, rangeM),
     })
     .then(cleanup, cleanup);
+}
+
+/**
+ * Centralized per-type fly dispatcher. Computes the inspection
+ * position purely from `entity.data` (independent of layer state)
+ * and forwards to flyToInspect. Both the central click handler in
+ * Viewer.tsx and the header SearchBox call this so fly behavior is
+ * identical regardless of how an entity was selected.
+ *
+ * Returning silently is intentional for cable/airspace/fire
+ * (cables/airspaces don't fly, fires use their own pipeline) and
+ * for missing position data.
+ */
+export function flyToSelected(
+  viewer: Cesium.Viewer | null,
+  entity: SelectedEntity,
+): void {
+  if (!viewer || viewer.isDestroyed()) return;
+  switch (entity.type) {
+    case "aircraft": {
+      const a = entity.data;
+      if (a.lat == null || a.lon == null) {
+        console.warn(
+          "[FLY SKIP] type=aircraft id=" + entity.id + " reason=no_position",
+        );
+        return;
+      }
+      const altRaw = a.alt_baro;
+      const altFt =
+        typeof altRaw === "number"
+          ? altRaw
+          : typeof altRaw === "string"
+            ? Number(altRaw) || 0
+            : 0;
+      const altM = Math.max(0, altFt * 0.3048);
+      const pos = Cesium.Cartesian3.fromDegrees(a.lon, a.lat, altM);
+      flyToInspect(viewer, pos, "aircraft");
+      return;
+    }
+    case "vessel": {
+      const v = entity.data;
+      if (v.lat == null || v.lon == null) {
+        console.warn(
+          "[FLY SKIP] type=vessel id=" + entity.id + " reason=no_position",
+        );
+        return;
+      }
+      const pos = Cesium.Cartesian3.fromDegrees(v.lon, v.lat, 0);
+      flyToInspect(viewer, pos, "vessel");
+      return;
+    }
+    case "satellite": {
+      const m = entity.data;
+      // Compute current sat position from TLE — independent of any
+      // layer-side worker tick (which gates on visibility and might
+      // not have run yet for a freshly-enabled satellites layer).
+      // flyToInspect re-predicts to currentTime+1.5s via the predict
+      // opts; this initial pos just seeds the temp entity.
+      try {
+        const rec = satellite.twoline2satrec(m.line1, m.line2);
+        if (!rec || (rec as { error?: number }).error) {
+          console.warn(
+            "[FLY SKIP] type=satellite id=" +
+              m.noradId +
+              " reason=satrec_error",
+          );
+          return;
+        }
+        const date = Cesium.JulianDate.toDate(viewer.clock.currentTime);
+        const pv = satellite.propagate(rec, date);
+        if (!pv || !pv.position || typeof pv.position === "boolean") {
+          console.warn(
+            "[FLY SKIP] type=satellite id=" +
+              m.noradId +
+              " reason=propagate_no_position",
+          );
+          return;
+        }
+        const gmst = satellite.gstime(date);
+        const gd = satellite.eciToGeodetic(pv.position, gmst);
+        const pos = Cesium.Cartesian3.fromRadians(
+          gd.longitude,
+          gd.latitude,
+          gd.height * 1000,
+        );
+        flyToInspect(viewer, pos, "satellite", {
+          predict: { noradId: m.noradId, line1: m.line1, line2: m.line2 },
+        });
+      } catch (err) {
+        console.warn(
+          "[FLY SKIP] type=satellite id=" +
+            m.noradId +
+            " reason=" +
+            (err instanceof Error ? err.message : "exception"),
+        );
+      }
+      return;
+    }
+    case "quake": {
+      const q = entity.data;
+      const pos = Cesium.Cartesian3.fromDegrees(
+        q.lon,
+        q.lat,
+        -q.depth_km * 1000,
+      );
+      flyToInspect(viewer, pos, "quake");
+      return;
+    }
+    case "fire": {
+      const f = entity.data;
+      const pos = Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 0);
+      flyToInspect(viewer, pos, "fire");
+      return;
+    }
+    // Cables and airspaces span thousands of km — no useful single
+    // inspection vantage, so intentionally no-op here.
+    case "cable":
+    case "airspace":
+      return;
+  }
 }

@@ -13,6 +13,7 @@ import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 import { setViewer } from "./viewer-handle";
 import { resolveClick, resolveHover } from "../utils/pick-resolvers";
+import { flyToSelected } from "../utils/click-to-fly";
 
 interface JammingTooltip {
   hex: string;
@@ -248,7 +249,12 @@ export default function Viewer() {
           const opened = useStore
             .getState()
             .replaceUnpinnedCards(result.selected);
-          if (opened && result.fly) result.fly();
+          if (opened) {
+            // Centralized fly wrapper — same path as the header search
+            // box. Per-type dispatch lives in click-to-fly.ts so both
+            // selection surfaces share identical fly behavior.
+            flyToSelected(viewer, result.selected);
+          }
         },
         Cesium.ScreenSpaceEventType.LEFT_CLICK,
       );

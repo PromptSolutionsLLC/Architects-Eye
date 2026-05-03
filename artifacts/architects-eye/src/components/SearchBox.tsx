@@ -6,6 +6,8 @@ import {
   type SearchEntityType,
   type SearchResult,
 } from "../utils/search-registry";
+import { flyToSelected } from "../utils/click-to-fly";
+import { getViewer } from "../globe/viewer-handle";
 
 const DEBOUNCE_MS = 150;
 const STALE_TOAST_MS = 2000;
@@ -118,9 +120,15 @@ export function SearchBox() {
     if (!visState.layerVisibility[layerKey]) {
       visState.setLayerVisible(layerKey, true);
     }
-    // Same pipeline as the central click handler in Viewer.tsx.
+    // Same pipeline as the central click handler in Viewer.tsx — open
+    // the card, then dispatch the fly through the centralized wrapper
+    // (which computes position from entity.data, sidestepping the
+    // per-layer fly closures whose internal state may not be ready
+    // for a layer that was just toggled on by setLayerVisible above).
     const opened = useStore.getState().replaceUnpinnedCards(cr.selected);
-    if (opened && cr.fly) cr.fly();
+    if (opened) {
+      flyToSelected(getViewer(), cr.selected);
+    }
 
     // Reset and blur so the dropdown disappears.
     setQuery("");
