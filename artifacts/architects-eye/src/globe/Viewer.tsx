@@ -129,23 +129,6 @@ export default function Viewer() {
         ),
       );
 
-      // [DIAGNOSTIC] Show on-screen FPS widget
-      viewer.scene.debugShowFramesPerSecond = true;
-
-      // [DIAGNOSTIC] Manual FPS counter via postRender
-      let frames = 0;
-      let fpsWindowStart = performance.now();
-      let lastFps = 0;
-      viewer.scene.postRender.addEventListener(() => {
-        frames++;
-        const now = performance.now();
-        if (now - fpsWindowStart >= 1000) {
-          lastFps = Math.round((frames * 1000) / (now - fpsWindowStart));
-          frames = 0;
-          fpsWindowStart = now;
-        }
-      });
-
       // Google Photorealistic 3D Tiles
       (async () => {
         try {
@@ -155,82 +138,11 @@ export default function Viewer() {
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
-
-            // FIX: dynamicScreenSpaceError raises the SSE threshold for
-            // tiles away from screen center, causing the tileset to stop
-            // requesting children for oblique-half tiles at low altitude.
-            // Result was a hard LOD seam (full detail vs parent-only).
-            // Disabling forces uniform refinement across the view.
+            // Disable dynamic SSE — slightly fewer tile requests, no
+            // visible quality impact for our use case (theaters use
+            // top-down / near-vertical angles where dynamic SSE doesn't
+            // help). Default maximumScreenSpaceError (16) retained.
             tileset.dynamicScreenSpaceError = false;
-            // ESCALATION: lower SSE from 16 → 8 to force higher-detail
-            // refinement everywhere. Tradeoff: ~2× tile requests, but
-            // FPS headroom is large (165 fps, 1.6 GB cache idle).
-            tileset.maximumScreenSpaceError = 8;
-
-            // [DIAGNOSTIC] Colorize photoreal tiles so we can visually
-            // identify which parts of the view are covered by the tileset
-            // vs. some other surface (globe, background, skybox).
-            (tileset as unknown as { debugColorizeTiles: boolean }).debugColorizeTiles = false;
-
-            // [DIAGNOSTIC] Set background to magenta — if seam areas are
-            // magenta, the tileset has a hole there. If they're blue, the
-            // blue is being drawn by something else (globe, atmosphere).
-            viewerRef.current.scene.backgroundColor = Cesium.Color.MAGENTA;
-
-            // [DIAGNOSTIC] Re-confirm globe + imagery state at runtime in
-            // case HMR didn't apply the earlier setting.
-            console.log("[GLOBE STATE]", {
-              globeShow: viewerRef.current.scene.globe.show,
-              imageryLayerCount: viewerRef.current.imageryLayers.length,
-              skyAtmosphereShow: viewerRef.current.scene.skyAtmosphere?.show,
-              backgroundColor: viewerRef.current.scene.backgroundColor.toString(),
-            });
-
-            // [DIAGNOSTIC] Tileset config dump
-            const t = tileset as unknown as Record<string, unknown> & {
-              boundingSphere?: { radius: number };
-              root?: { geometricError?: number };
-            };
-            console.log("[TILESET CONFIG]", {
-              maximumScreenSpaceError: t.maximumScreenSpaceError,
-              maximumMemoryUsage: t.maximumMemoryUsage,
-              cacheBytes: t.cacheBytes,
-              dynamicScreenSpaceError: t.dynamicScreenSpaceError,
-              dynamicScreenSpaceErrorDensity: t.dynamicScreenSpaceErrorDensity,
-              dynamicScreenSpaceErrorFactor: t.dynamicScreenSpaceErrorFactor,
-              preloadWhenHidden: t.preloadWhenHidden,
-              preloadFlightDestinations: t.preloadFlightDestinations,
-              boundingSphereRadius: t.boundingSphere?.radius,
-              rootGeometricError: t.root?.geometricError,
-            });
-
-            // [DIAGNOSTIC] Tile failures
-            tileset.tileFailed.addEventListener(
-              (error: { url: string; message: string }) => {
-                console.warn("[TILE FAIL]", error.url, error.message);
-              },
-            );
-
-            // [DIAGNOSTIC] 3s interval stats dump (extended)
-            const statsTimer = setInterval(() => {
-              const v = viewerRef.current;
-              if (!v || v.isDestroyed()) {
-                clearInterval(statsTimer);
-                return;
-              }
-              const s = (tileset as unknown as { statistics: Record<string, number> }).statistics;
-              const fs = (v.scene as unknown as { frameState?: { frustumCommandsList?: unknown[] } }).frameState;
-              console.log("[TILESET STATS]", {
-                ready: s.numberOfTilesWithContentReady,
-                pending: s.numberOfPendingRequests,
-                attempted: s.numberOfAttemptedRequests,
-                culledChildrenUnion: s.numberOfTilesCulledWithChildrenUnion,
-                processing: s.numberOfTilesProcessing,
-                cameraAltM: Math.round(v.camera.positionCartographic.height),
-                frustumCmds: fs?.frustumCommandsList?.length ?? null,
-                fps: lastFps,
-              });
-            }, 3000);
           }
         } catch (err) {
           console.error("Failed to load Google Photorealistic 3D Tiles:", err);

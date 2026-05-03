@@ -1,26 +1,5 @@
 import { useStore } from "../store";
 
-// [DIAGNOSTIC] AIS position arrival logger — first 60s after page load only
-const __aisDiagStart = Date.now();
-const __aisDiagMmsis = new Set<number>();
-let __aisDiagCount = 0;
-let __aisDiagSummaryFired = false;
-function diagLogPosition(mmsi: number, lat: number, lon: number): void {
-  const elapsed = Date.now() - __aisDiagStart;
-  if (elapsed <= 60_000) {
-    __aisDiagCount++;
-    __aisDiagMmsis.add(mmsi);
-    console.log(
-      `[AIS POSITION] MMSI=${mmsi} lat=${lat.toFixed(5)} lon=${lon.toFixed(5)}`,
-    );
-  } else if (!__aisDiagSummaryFired) {
-    __aisDiagSummaryFired = true;
-    console.log(
-      `[AIS POSITION SUMMARY] events=${__aisDiagCount} uniqueMmsis=${__aisDiagMmsis.size} window=60s`,
-    );
-  }
-}
-
 export interface BBox {
   swLat: number;
   swLon: number;
@@ -289,9 +268,6 @@ export class AISStreamClient {
       const lat = typeof md.latitude === "number" ? md.latitude : r.Latitude;
       const lon = typeof md.longitude === "number" ? md.longitude : r.Longitude;
       if (typeof lat !== "number" || typeof lon !== "number") return;
-      // [DIAGNOSTIC] Log every AIS position arrival for the first 60s
-      // after page load, then stop. Track unique MMSIs in __aisDiag.
-      diagLogPosition(mmsi, lat, lon);
       this.listeners.position?.({
         mmsi,
         lat,
