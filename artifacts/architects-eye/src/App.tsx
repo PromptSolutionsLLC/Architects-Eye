@@ -1,8 +1,10 @@
 import Viewer from "./globe/Viewer";
 import { BootScreen } from "./components/BootScreen";
 import { EntityCardStack } from "./components/EntityCardStack";
+import { GoogleAttribution } from "./components/GoogleAttribution";
 import { HeaderBar } from "./components/HeaderBar";
 import { LayerToggles } from "./components/LayerToggles";
+import { MobileGate } from "./components/MobileGate";
 import { PerfModeController } from "./components/PerfModeController";
 import { TheaterPanel } from "./components/TheaterPanel";
 import { TheaterToast } from "./components/TheaterToast";
@@ -82,8 +84,10 @@ export default function App() {
       <EntityCardStack />
       <Timeline />
       <TheaterToast />
+      <GoogleAttribution />
       <PerfModeController />
       <BootScreen />
+      <MobileGate />
     </div>
   );
 }
