@@ -6,6 +6,33 @@ import {
   type VesselStatic,
 } from "../ws/aisstream-client";
 import { flyToInspect } from "../utils/click-to-fly";
+import {
+  registerClickResolver,
+  unregisterClickResolver,
+  type ClickResult,
+} from "../utils/pick-resolvers";
+
+const TELEPORT_NM_THRESHOLD = 100;
+const TELEPORT_S_THRESHOLD = 60;
+const EARTH_RADIUS_NM = 3_440.065;
+
+function haversineNm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const toRad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toRad;
+  const dLon = (lon2 - lon1) * toRad;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * toRad) *
+      Math.cos(lat2 * toRad) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return 2 * EARTH_RADIUS_NM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
 
 const STALE_MS = 5 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 30_000;
@@ -81,7 +108,6 @@ export class VesselLayer {
   private client: AISStreamClient;
   private entries = new Map<number, Entry>();
   private staticByMmsi = new Map<number, VesselStatic>();
-  private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeSelection: (() => void) | null = null;
   private currentVisibility = false;
@@ -118,36 +144,33 @@ export class VesselLayer {
       PRUNE_INTERVAL_MS,
     );
 
-    this.handler = new Cesium.ScreenSpaceEventHandler(
-      this.viewer.scene.canvas,
-    );
-    this.handler.setInputAction(
-      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-        const picked = this.viewer.scene.pick(event.position);
-        if (!Cesium.defined(picked)) return;
-        if (!(picked.id instanceof Cesium.Entity)) return;
-        const name = picked.id.name;
-        if (!name || !name.startsWith(ENTITY_NAME_PREFIX)) return;
-        const mmsi = Number.parseInt(name.slice(ENTITY_NAME_PREFIX.length), 10);
-        if (!Number.isFinite(mmsi)) return;
-        const entry = this.entries.get(mmsi);
-        if (!entry || !entry.lastPos) return;
-        const sd = this.staticByMmsi.get(mmsi);
-        const data: VesselSelectionData = {
-          mmsi,
-          name: sd?.name || `MMSI ${mmsi}`,
-          type: sd?.type ?? 0,
-          flag: sd?.flag ?? "",
-          callsign: sd?.callsign ?? "",
-          destination: sd?.destination ?? "",
-          sog: entry.lastPos.sog,
-          cog: entry.lastPos.cog,
-        };
-        useStore.getState().setSelectedEntity({
-          type: "vessel",
-          id: String(mmsi),
-          data,
-        });
+    registerClickResolver("vessel", (picked) => this.resolveClick(picked));
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!picked || typeof picked !== "object") return null;
+    const id = (picked as { id?: unknown }).id;
+    if (!(id instanceof Cesium.Entity)) return null;
+    const name = id.name;
+    if (!name || !name.startsWith(ENTITY_NAME_PREFIX)) return null;
+    const mmsi = Number.parseInt(name.slice(ENTITY_NAME_PREFIX.length), 10);
+    if (!Number.isFinite(mmsi)) return null;
+    const entry = this.entries.get(mmsi);
+    if (!entry || !entry.lastPos) return null;
+    const sd = this.staticByMmsi.get(mmsi);
+    const data: VesselSelectionData = {
+      mmsi,
+      name: sd?.name || `MMSI ${mmsi}`,
+      type: sd?.type ?? 0,
+      flag: sd?.flag ?? "",
+      callsign: sd?.callsign ?? "",
+      destination: sd?.destination ?? "",
+      sog: entry.lastPos.sog,
+      cog: entry.lastPos.cog,
+    };
+    return {
+      selected: { type: "vessel", id: String(mmsi), data },
+      fly: () => {
         let pos = entry.positionProperty.getValue(
           this.viewer.clock.currentTime,
         );
@@ -161,12 +184,12 @@ export class VesselLayer {
         if (pos) {
           flyToInspect(this.viewer, pos, "vessel");
         } else {
-          console.warn("[CLICK FLY SKIP] type=vessel id=" + mmsi +
-            " reason=no_position");
+          console.warn(
+            "[CLICK FLY SKIP] type=vessel id=" + mmsi + " reason=no_position",
+          );
         }
       },
-      Cesium.ScreenSpaceEventType.LEFT_CLICK,
-    );
+    };
   }
 
   destroy(): void {
@@ -174,10 +197,7 @@ export class VesselLayer {
       window.clearInterval(this.pruneTimer);
       this.pruneTimer = null;
     }
-    if (this.handler) {
-      this.handler.destroy();
-      this.handler = null;
-    }
+    unregisterClickResolver("vessel");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
@@ -224,6 +244,37 @@ export class VesselLayer {
 
   private onPosition(p: VesselPosition): void {
     if (this.viewer.isDestroyed()) return;
+
+    // Teleport detector: AISStream very occasionally emits position
+    // reports for an MMSI that jump implausible distances in seconds
+    // (data corruption, MMSI collision, decoder error). Drop any
+    // update that moves > 100 nm in < 60 s. First report for an MMSI
+    // (no prior position) is never dropped.
+    const prevEntry = this.entries.get(p.mmsi);
+    if (prevEntry && prevEntry.lastPos) {
+      const deltaS = (p.ts - prevEntry.lastSeen) / 1000;
+      if (deltaS < TELEPORT_S_THRESHOLD) {
+        const deltaNm = haversineNm(
+          prevEntry.lastPos.lat,
+          prevEntry.lastPos.lon,
+          p.lat,
+          p.lon,
+        );
+        if (deltaNm > TELEPORT_NM_THRESHOLD) {
+          console.warn("[VESSEL TELEPORT DROP]", {
+            mmsi: p.mmsi,
+            prev_lat: prevEntry.lastPos.lat,
+            prev_lon: prevEntry.lastPos.lon,
+            new_lat: p.lat,
+            new_lon: p.lon,
+            delta_nm: deltaNm,
+            delta_s: deltaS,
+          });
+          return;
+        }
+      }
+    }
+
     const jd = Cesium.JulianDate.now();
     const futureJd = Cesium.JulianDate.addSeconds(
       jd,

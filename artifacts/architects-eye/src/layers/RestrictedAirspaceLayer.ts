@@ -4,6 +4,11 @@ import {
   RESTRICTED_AIRSPACE,
   type RestrictedAirspaceZone,
 } from "../data/restricted-airspace";
+import {
+  registerClickResolver,
+  unregisterClickResolver,
+  type ClickResult,
+} from "../utils/pick-resolvers";
 
 interface PickIdPayload {
   layer: "restrictedAirspace";
@@ -13,7 +18,6 @@ interface PickIdPayload {
 export class RestrictedAirspaceLayer {
   private viewer: Cesium.Viewer;
   private dataSource: Cesium.CustomDataSource | null = null;
-  private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private currentVisibility = true;
 
@@ -50,32 +54,27 @@ export class RestrictedAirspaceLayer {
       .getState()
       .setLayerCount("restrictedAirspace", RESTRICTED_AIRSPACE.length);
 
-    // Click handler — picks any entity belonging to this layer
-    this.handler = new Cesium.ScreenSpaceEventHandler(
-      this.viewer.scene.canvas,
-    );
-    this.handler.setInputAction(
-      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-        if (!this.currentVisibility) return;
-        const picked = this.viewer.scene.pick(event.position);
-        if (!Cesium.defined(picked)) return;
-        const entity = picked.id;
-        if (!(entity instanceof Cesium.Entity)) return;
-        const props = entity.properties;
-        if (!props) return;
-        const layerProp = props.getValue(Cesium.JulianDate.now())?.layer;
-        if (layerProp !== "restrictedAirspace") return;
-        const zoneId = props.getValue(Cesium.JulianDate.now())?.zoneId;
-        const zone = RESTRICTED_AIRSPACE.find((z) => z.id === zoneId);
-        if (!zone) return;
-        useStore.getState().setSelectedEntity({
-          type: "airspace",
-          id: zone.id,
-          data: zone,
-        });
-      },
-      Cesium.ScreenSpaceEventType.LEFT_CLICK,
-    );
+    registerClickResolver("airspace", (picked) => this.resolveClick(picked));
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!this.currentVisibility) return null;
+    if (!picked || typeof picked !== "object") return null;
+    const entity = (picked as { id?: unknown }).id;
+    if (!(entity instanceof Cesium.Entity)) return null;
+    const props = entity.properties;
+    if (!props) return null;
+    const v = props.getValue(Cesium.JulianDate.now()) as
+      | Partial<PickIdPayload>
+      | undefined;
+    if (!v || v.layer !== "restrictedAirspace") return null;
+    const zone = RESTRICTED_AIRSPACE.find((z) => z.id === v.zoneId);
+    if (!zone) return null;
+    // No fly: airspace zones span huge regions; clicking just opens the
+    // EntityPanel with zone metadata.
+    return {
+      selected: { type: "airspace", id: zone.id, data: zone },
+    };
   }
 
   private addZone(zone: RestrictedAirspaceZone): void {
@@ -121,10 +120,7 @@ export class RestrictedAirspaceLayer {
   }
 
   destroy(): void {
-    if (this.handler) {
-      this.handler.destroy();
-      this.handler = null;
-    }
+    unregisterClickResolver("airspace");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

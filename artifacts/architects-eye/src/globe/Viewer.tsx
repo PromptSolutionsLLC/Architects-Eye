@@ -10,6 +10,14 @@ import { FiresLayer } from "../layers/FiresLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 import { setViewer } from "./viewer-handle";
+import { resolveClick, resolveHover } from "../utils/pick-resolvers";
+
+interface JammingTooltip {
+  hex: string;
+  intensity: number;
+  x: number;
+  y: number;
+}
 
 export default function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -23,7 +31,19 @@ export default function Viewer() {
   );
   const firesLayerRef = useRef<FiresLayer | null>(null);
   const aisClientRef = useRef<AISStreamClient | null>(null);
+  const centralHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jammingTooltip, setJammingTooltip] = useState<JammingTooltip | null>(
+    null,
+  );
+
+  // Clear stale jamming tooltip the instant the layer is toggled off
+  // (without waiting for the next MOUSE_MOVE). Selecting the boolean
+  // directly keeps re-renders confined to visibility flips.
+  const jammingVisible = useStore((s) => s.layerVisibility.jamming);
+  useEffect(() => {
+    if (!jammingVisible) setJammingTooltip(null);
+  }, [jammingVisible]);
 
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
@@ -189,6 +209,52 @@ export default function Viewer() {
       const firesLayer = new FiresLayer(viewer);
       firesLayerRef.current = firesLayer;
       void firesLayer.mount();
+
+      // ── Central pick handlers ─────────────────────────────────────
+      // ONE LEFT_CLICK / MOUSE_MOVE handler shared by all layers.
+      // Layers register resolvers via pick-resolvers.ts; we run a
+      // single viewer.scene.pick() per event and dispatch to whichever
+      // resolver claims the picked object (priority: airspace → fire
+      // → satellite → aircraft → vessel for clicks; jamming for hover).
+      const ssh = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      centralHandlerRef.current = ssh;
+
+      ssh.setInputAction(
+        (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+          if (viewer.isDestroyed()) return;
+          const picked = viewer.scene.pick(event.position);
+          const result = Cesium.defined(picked) ? resolveClick(picked) : null;
+          if (!result) {
+            useStore.getState().setSelectedEntity(null);
+            return;
+          }
+          // EntityPanel-first ordering: selection always set before fly
+          // dispatch so the panel opens immediately, even if isTheaterFlying
+          // suppresses the camera move inside flyToInspect.
+          useStore.getState().setSelectedEntity(result.selected);
+          if (result.fly) result.fly();
+        },
+        Cesium.ScreenSpaceEventType.LEFT_CLICK,
+      );
+
+      ssh.setInputAction(
+        (event: Cesium.ScreenSpaceEventHandler.MotionEvent) => {
+          if (viewer.isDestroyed()) return;
+          const picked = viewer.scene.pick(event.endPosition);
+          const hover = Cesium.defined(picked) ? resolveHover(picked) : null;
+          if (hover) {
+            setJammingTooltip({
+              hex: hover.hex,
+              intensity: hover.intensity,
+              x: event.endPosition.x,
+              y: event.endPosition.y,
+            });
+          } else {
+            setJammingTooltip(null);
+          }
+        },
+        Cesium.ScreenSpaceEventType.MOUSE_MOVE,
+      );
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -197,6 +263,10 @@ export default function Viewer() {
     }
 
     return () => {
+      if (centralHandlerRef.current) {
+        centralHandlerRef.current.destroy();
+        centralHandlerRef.current = null;
+      }
       firesLayerRef.current?.destroy();
       firesLayerRef.current = null;
       restrictedAirspaceLayerRef.current?.destroy();
@@ -248,9 +318,35 @@ export default function Viewer() {
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ width: "100%", height: "100%", overflow: "hidden" }}
-    />
+    <div style={{ width: "100%", height: "100%", overflow: "hidden" }}>
+      <div
+        ref={containerRef}
+        style={{ width: "100%", height: "100%", overflow: "hidden" }}
+      />
+      {jammingTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            // Anchor: top-left corner of tooltip sits 12 px to the
+            // right and below the cursor.
+            left: jammingTooltip.x + 12,
+            top: jammingTooltip.y + 12,
+            background: "#0a0a0a",
+            border: "1px solid #fbbf24",
+            color: "#fef3c7",
+            padding: "6px 10px",
+            font: "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+            lineHeight: 1.4,
+            pointerEvents: "none",
+            zIndex: 1000,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <div>H3 INDEX: {jammingTooltip.hex}</div>
+          <div>INTENSITY: {jammingTooltip.intensity.toFixed(2)}</div>
+          <div>SOURCE: GPSJam.org · 2026-05-01</div>
+        </div>
+      )}
+    </div>
   );
 }

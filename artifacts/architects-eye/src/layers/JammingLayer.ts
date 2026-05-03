@@ -1,6 +1,17 @@
 import * as Cesium from "cesium";
 import { cellToBoundary } from "h3-js";
 import { useStore } from "../store";
+import {
+  registerHoverResolver,
+  unregisterHoverResolver,
+  type HoverResult,
+} from "../utils/pick-resolvers";
+
+interface JammingPickId {
+  layer: "jamming";
+  hex: string;
+  ratio: number;
+}
 
 const CSV_URL = "/data/gpsjam-2026-05-01.csv";
 // Render only cells with a meaningful bad/total ratio so we keep the
@@ -156,12 +167,32 @@ export class JammingLayer {
     this.primitive.show = this.currentVisibility;
     this.viewer.scene.primitives.add(this.primitive);
 
+    // Register hover resolver only AFTER the primitive is live so that
+    // any failure path above (fetch error, viewer destroyed, empty CSV,
+    // empty instances) leaves no stale resolver in the registry.
+    registerHoverResolver("jamming", (picked) => this.resolveHover(picked));
+
     this.mounted = true;
     useStore.getState().setLayerCount("jamming", instances.length);
     useStore.getState().setLayerAvailable("jamming", true);
   }
 
+  private resolveHover(picked: unknown): HoverResult | null {
+    // Tooltip ONLY appears when JammingLayer is toggled visible.
+    if (!this.currentVisibility) return null;
+    if (!picked || typeof picked !== "object") return null;
+    const id = (picked as { id?: unknown }).id as
+      | Partial<JammingPickId>
+      | undefined;
+    if (!id || id.layer !== "jamming" || typeof id.hex !== "string") {
+      return null;
+    }
+    const ratio = typeof id.ratio === "number" ? id.ratio : 0;
+    return { hex: id.hex, intensity: ratio };
+  }
+
   destroy(): void {
+    unregisterHoverResolver("jamming");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

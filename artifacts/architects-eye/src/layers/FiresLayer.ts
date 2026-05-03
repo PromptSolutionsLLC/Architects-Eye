@@ -2,6 +2,11 @@ import * as Cesium from "cesium";
 import { useStore } from "../store";
 import { fetchFires, type Fire } from "../utils/api";
 import { flyToInspect } from "../utils/click-to-fly";
+import {
+  registerClickResolver,
+  unregisterClickResolver,
+  type ClickResult,
+} from "../utils/pick-resolvers";
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -40,7 +45,6 @@ export class FiresLayer {
   private viewer: Cesium.Viewer;
   private collection: Cesium.PointPrimitiveCollection | null = null;
   private fires: Fire[] = [];
-  private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private currentVisibility = false;
   private refreshTimer: number | null = null;
@@ -65,35 +69,33 @@ export class FiresLayer {
     this.viewer.scene.primitives.add(collection);
     this.collection = collection;
 
-    this.handler = new Cesium.ScreenSpaceEventHandler(
-      this.viewer.scene.canvas,
-    );
-    this.handler.setInputAction(
-      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-        const picked = this.viewer.scene.pick(event.position);
-        if (!Cesium.defined(picked)) return;
-        const id = picked.id as Partial<PickIdPayload> | undefined;
-        if (!id || id.layer !== "fires" || typeof id.fireIndex !== "number") {
-          return;
-        }
-        const fire = this.fires[id.fireIndex];
-        if (!fire) return;
-        useStore.getState().setSelectedEntity({
-          type: "fire",
-          id: `fire-${id.fireIndex}`,
-          data: fire,
-        });
-        const pos = Cesium.Cartesian3.fromDegrees(fire.lon, fire.lat);
-        flyToInspect(this.viewer, pos, "fire");
-      },
-      Cesium.ScreenSpaceEventType.LEFT_CLICK,
-    );
+    registerClickResolver("fire", (picked) => this.resolveClick(picked));
 
     await this.refresh();
 
     this.refreshTimer = window.setInterval(() => {
       void this.refresh();
     }, REFRESH_INTERVAL_MS);
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!picked || typeof picked !== "object") return null;
+    const id = (picked as { id?: unknown }).id as
+      | Partial<PickIdPayload>
+      | undefined;
+    if (!id || id.layer !== "fires" || typeof id.fireIndex !== "number") {
+      return null;
+    }
+    const fireIndex = id.fireIndex;
+    const fire = this.fires[fireIndex];
+    if (!fire) return null;
+    return {
+      selected: { type: "fire", id: `fire-${fireIndex}`, data: fire },
+      fly: () => {
+        const pos = Cesium.Cartesian3.fromDegrees(fire.lon, fire.lat);
+        flyToInspect(this.viewer, pos, "fire");
+      },
+    };
   }
 
   private async refresh(): Promise<void> {
@@ -123,10 +125,7 @@ export class FiresLayer {
       window.clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
-    if (this.handler) {
-      this.handler.destroy();
-      this.handler = null;
-    }
+    unregisterClickResolver("fire");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

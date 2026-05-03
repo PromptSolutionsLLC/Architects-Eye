@@ -2,6 +2,11 @@ import * as Cesium from "cesium";
 import { fetchAircraft, type Aircraft } from "../utils/api";
 import { useStore } from "../store";
 import { flyToInspect } from "../utils/click-to-fly";
+import {
+  registerClickResolver,
+  unregisterClickResolver,
+  type ClickResult,
+} from "../utils/pick-resolvers";
 
 const POLL_INTERVAL_MS = 12_000;
 const STALE_MS = 60_000;
@@ -67,7 +72,6 @@ export class AircraftLayer {
   private viewer: Cesium.Viewer;
   private entries = new Map<string, EntityEntry>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeSelection: (() => void) | null = null;
   private currentVisibility = true;
@@ -100,58 +104,43 @@ export class AircraftLayer {
     void this.poll();
     this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
 
-    this.handler = new Cesium.ScreenSpaceEventHandler(
-      this.viewer.scene.canvas,
-    );
-    this.handler.setInputAction(
-      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-        const picked = this.viewer.scene.pick(event.position);
-        if (!Cesium.defined(picked)) {
-          // Only deselect when the *current* selection is an aircraft.
-          // Other layers (satellites, vessels, airspace) own their own
-          // selections and would otherwise be clobbered because every
-          // ScreenSpaceEventHandler fires on the same LEFT_CLICK.
-          const cur = useStore.getState().selectedEntity;
-          if (cur && cur.type === "aircraft") {
-            useStore.getState().setSelectedEntity(null);
-          }
-          return;
-        }
-        if (!(picked.id instanceof Cesium.Entity)) return;
-        const entity = picked.id as Cesium.Entity;
-        const hex = entity.name;
-        if (!hex) return;
-        const entry = this.entries.get(hex);
-        if (entry) {
-          useStore.getState().setSelectedEntity({
-            type: "aircraft",
-            id: hex,
-            data: entry.ac,
-          });
-          let pos = entry.positionProperty.getValue(
-            this.viewer.clock.currentTime,
+    registerClickResolver("aircraft", (picked) => this.resolveClick(picked));
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!picked || typeof picked !== "object") return null;
+    const id = (picked as { id?: unknown }).id;
+    if (!(id instanceof Cesium.Entity)) return null;
+    const hex = id.name;
+    if (!hex) return null;
+    const entry = this.entries.get(hex);
+    if (!entry) return null;
+    return {
+      selected: { type: "aircraft", id: hex, data: entry.ac },
+      fly: () => {
+        let pos = entry.positionProperty.getValue(
+          this.viewer.clock.currentTime,
+        );
+        if (!pos && entry.ac.lat != null && entry.ac.lon != null) {
+          const altM =
+            typeof entry.ac.alt_baro === "number"
+              ? Math.max(0, entry.ac.alt_baro * 0.3048)
+              : 0;
+          pos = Cesium.Cartesian3.fromDegrees(
+            entry.ac.lon,
+            entry.ac.lat,
+            altM,
           );
-          if (!pos && entry.ac.lat != null && entry.ac.lon != null) {
-            const altM =
-              typeof entry.ac.alt_baro === "number"
-                ? Math.max(0, entry.ac.alt_baro * 0.3048)
-                : 0;
-            pos = Cesium.Cartesian3.fromDegrees(
-              entry.ac.lon,
-              entry.ac.lat,
-              altM,
-            );
-          }
-          if (pos) {
-            flyToInspect(this.viewer, pos, "aircraft");
-          } else {
-            console.warn("[CLICK FLY SKIP] type=aircraft id=" + hex +
-              " reason=no_position");
-          }
+        }
+        if (pos) {
+          flyToInspect(this.viewer, pos, "aircraft");
+        } else {
+          console.warn(
+            "[CLICK FLY SKIP] type=aircraft id=" + hex + " reason=no_position",
+          );
         }
       },
-      Cesium.ScreenSpaceEventType.LEFT_CLICK,
-    );
+    };
   }
 
   destroy(): void {
@@ -159,10 +148,7 @@ export class AircraftLayer {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    if (this.handler) {
-      this.handler.destroy();
-      this.handler = null;
-    }
+    unregisterClickResolver("aircraft");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

@@ -11,6 +11,11 @@ import {
 } from "../utils/tle";
 import SatelliteWorker from "../workers/sgp4.worker?worker";
 import { flyToInspect } from "../utils/click-to-fly";
+import {
+  registerClickResolver,
+  unregisterClickResolver,
+  type ClickResult,
+} from "../utils/pick-resolvers";
 
 const TICK_INTERVAL_MS = 1000;
 const SAT_TRAIL_HALF_WINDOW_S = 1800;
@@ -103,7 +108,6 @@ export class SatelliteLayer {
   private fpsFrames = 0;
   private fpsAccum = 0;
   private fpsLastT = 0;
-  private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeSelection: (() => void) | null = null;
   private trailedNoradId: string | null = null;
@@ -207,40 +211,9 @@ export class SatelliteLayer {
     });
     this.syncTrail(useStore.getState().selectedEntity);
 
-    // Centralized click handler — resolves both PointPrimitive picks
-    // (point-mode) and model Entity picks (gltf-mode) to the same payload.
-    this.handler = new Cesium.ScreenSpaceEventHandler(
-      this.viewer.scene.canvas,
-    );
-    this.handler.setInputAction(
-      (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-        const picked = this.viewer.scene.pick(event.position);
-        if (!Cesium.defined(picked)) return;
-        const satIndex = this.resolveSatIndex(picked);
-        if (satIndex === null) return;
-        const meta = this.metas[satIndex];
-        if (!meta) return;
-        useStore.getState().setSelectedEntity({
-          type: "satellite",
-          id: meta.noradId,
-          data: meta,
-        });
-        const pos = this.currentPositions[satIndex];
-        if (pos) {
-          flyToInspect(this.viewer, pos, "satellite", {
-            predict: {
-              noradId: meta.noradId,
-              line1: meta.line1,
-              line2: meta.line2,
-            },
-          });
-        } else {
-          console.warn("[CLICK FLY SKIP] type=satellite id=" +
-            meta.noradId + " reason=no_position");
-        }
-      },
-      Cesium.ScreenSpaceEventType.LEFT_CLICK,
-    );
+    // Resolves both PointPrimitive picks (point-mode) and model Entity
+    // picks (gltf-mode) to the same satIndex payload via resolveSatIndex.
+    registerClickResolver("satellite", (picked) => this.resolveClick(picked));
 
     // LOD: re-evaluate on camera move-end (debounced 500ms)
     this.cameraMoveRemove = this.viewer.camera.moveEnd.addEventListener(() => {
@@ -270,10 +243,7 @@ export class SatelliteLayer {
       this.clockRemove();
       this.clockRemove = null;
     }
-    if (this.handler) {
-      this.handler.destroy();
-      this.handler = null;
-    }
+    unregisterClickResolver("satellite");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
@@ -306,6 +276,38 @@ export class SatelliteLayer {
     this.tles = [];
     this.currentPositions = [];
     useStore.getState().setLayerCount("satellites", 0);
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!picked || typeof picked !== "object") return null;
+    const satIndex = this.resolveSatIndex(picked as {
+      id?: unknown;
+      primitive?: unknown;
+    });
+    if (satIndex === null) return null;
+    const meta = this.metas[satIndex];
+    if (!meta) return null;
+    return {
+      selected: { type: "satellite", id: meta.noradId, data: meta },
+      fly: () => {
+        const pos = this.currentPositions[satIndex];
+        if (pos) {
+          flyToInspect(this.viewer, pos, "satellite", {
+            predict: {
+              noradId: meta.noradId,
+              line1: meta.line1,
+              line2: meta.line2,
+            },
+          });
+        } else {
+          console.warn(
+            "[CLICK FLY SKIP] type=satellite id=" +
+              meta.noradId +
+              " reason=no_position",
+          );
+        }
+      },
+    };
   }
 
   private resolveSatIndex(picked: { id?: unknown; primitive?: unknown }):
