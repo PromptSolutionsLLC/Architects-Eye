@@ -162,6 +162,10 @@ export default function Viewer() {
             // Result was a hard LOD seam (full detail vs parent-only).
             // Disabling forces uniform refinement across the view.
             tileset.dynamicScreenSpaceError = false;
+            // ESCALATION: lower SSE from 16 → 8 to force higher-detail
+            // refinement everywhere. Tradeoff: ~2× tile requests, but
+            // FPS headroom is large (165 fps, 1.6 GB cache idle).
+            tileset.maximumScreenSpaceError = 8;
 
             // [DIAGNOSTIC] Colorize photoreal tiles so we can visually
             // identify which parts of the view are covered by the tileset
