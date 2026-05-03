@@ -377,7 +377,9 @@ export class VesselLayer {
         rotation: rotationProperty,
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        // 0 = depth-test against the globe so far-side vessels are
+        // hidden by the planet (see AircraftLayer for full rationale).
+        disableDepthTestDistance: 0,
         scaleByDistance: new Cesium.NearFarScalar(1.0e4, 1.6, 8.0e6, 0.5),
       },
     });

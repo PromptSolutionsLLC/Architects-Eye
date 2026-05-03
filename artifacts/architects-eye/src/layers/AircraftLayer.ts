@@ -492,7 +492,10 @@ export class AircraftLayer {
       rotation: rotationProperty,
       verticalOrigin: Cesium.VerticalOrigin.CENTER,
       horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      // 0 = always depth-test against the globe, so aircraft on the
+      // far side of the planet are correctly occluded. POSITIVE_INFINITY
+      // would draw them through the ellipsoid (the previous bug).
+      disableDepthTestDistance: 0,
       scaleByDistance: new Cesium.NearFarScalar(1.0e4, 1.8, 8.0e6, 0.5),
     };
   }

@@ -112,6 +112,9 @@ export class FiresLayer {
         position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
         color: colorForFire(f),
         pixelSize: pixelSizeForFrp(f.frp),
+        // Depth-test against the globe so far-side fires are
+        // occluded by the planet instead of bleeding through.
+        disableDepthTestDistance: 0,
         id,
       });
     }

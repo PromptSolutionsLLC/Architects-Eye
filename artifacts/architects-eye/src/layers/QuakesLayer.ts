@@ -172,6 +172,9 @@ export class QuakesLayer {
         color: colorForMag(q.magnitude),
         pixelSize: pixelSizeForMag(q.magnitude),
         outlineWidth: 0,
+        // Depth-test against the globe so far-side quakes are
+        // occluded by the planet instead of bleeding through.
+        disableDepthTestDistance: 0,
         id,
       });
     }
