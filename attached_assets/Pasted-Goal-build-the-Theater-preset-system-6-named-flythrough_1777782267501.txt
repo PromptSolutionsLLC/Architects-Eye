@@ -1,0 +1,139 @@
+Goal: build the Theater preset system (6 named flythroughs) AND a "Restricted Airspace" overlay layer with thick red dashed polygons for known no-fly / closed airspace zones. These two systems are tightly related: theaters toggle the airspace layer on/off based on relevance.
+
+PART 1 — Restricted Airspace overlay layer:
+
+1. src/data/restricted-airspace.ts — hardcoded array of polygon definitions:
+
+const RESTRICTED_AIRSPACE = [
+  {
+    id: 'russia-eu-closure',
+    name: 'Russian Airspace (EU/UK/US closed)',
+    description: 'Closed to EU, UK, US, and Canadian carriers since Feb 2022',
+    color: '#ef4444', // red-500
+    coords: [/* Russia bounding polygon — simplified ~30 vertices around the country borders */]
+  },
+  {
+    id: 'iran-closure',
+    name: 'Iranian Airspace (commercial advisory)',
+    description: 'GPS jamming, drone activity, advisory closures',
+    color: '#f59e0b', // amber-500
+    coords: [/* Iran bounding polygon */]
+  },
+  {
+    id: 'nkorea-adiz',
+    name: 'North Korean ADIZ',
+    description: 'Air Defense Identification Zone',
+    color: '#ef4444',
+    coords: [/* NK + 50nm offshore */]
+  },
+  {
+    id: 'gaza-noflight',
+    name: 'Gaza No-Fly Zone',
+    description: 'Active conflict, military operations',
+    color: '#ef4444',
+    coords: [/* Gaza Strip + buffer */]
+  },
+  {
+    id: 'ukraine-east',
+    name: 'Eastern Ukraine Active Combat',
+    description: 'Active military operations, no civilian aviation',
+    color: '#ef4444',
+    coords: [/* Eastern Ukraine, Donbas, occupied territories — rough polygon */]
+  }
+];
+
+For each polygon, use simplified coordinates (~20-40 lat/lon vertices). Approximate from public knowledge — these don't need to be politically precise. Include the entire country for Russia/Iran/NK; specific regions for Ukraine/Gaza.
+
+2. src/layers/RestrictedAirspaceLayer.ts:
+   - On mount: loop through RESTRICTED_AIRSPACE, create a Cesium.Entity for each
+   - Each entity uses PolylineGraphics (not PolygonGraphics) for the OUTLINE — closed loop
+   - Material: Cesium.PolylineDashMaterialProperty with the zone's color, dashLength 16, gapLength 8
+   - Width: 3 pixels
+   - clampToGround: true
+   - Optional: add a faint translucent fill using PolygonGraphics with same color at 0.05 alpha — this gives subtle visual presence at zoom-out without overwhelming
+   - Click handler: store.setSelectedEntity({ type: 'airspace', id, data: zoneDefinition })
+   - Subscribe to layerVisibility.restrictedAirspace — toggle entire collection
+   - Add 'restrictedAirspace' to the store's layerVisibility object, default TRUE (these are core OSINT context, not optional)
+
+3. LayerToggles.tsx — add a new toggle row "Restricted Airspace" between Jamming and Fires, red dot. Count = number of zones.
+
+4. EntityPanel.tsx — handle type 'airspace': show name, description, an "i" icon. No coordinates display, no MMSI, no altitude — just the human-readable advisory.
+
+PART 2 — Theater preset system:
+
+1. src/data/theaters.ts — array of theater definitions:
+
+const THEATERS = [
+  {
+    id: 'hormuz',
+    name: 'Strait of Hormuz',
+    description: 'Maritime chokepoint, GPS jamming overlay, Iranian airspace',
+    camera: { lon: 56.5, lat: 26.0, height: 800000, pitch: -45 },
+    layers: { aircraft: true, vessels: true, satellites: false, jamming: true, restrictedAirspace: true, fires: false },
+    flyDuration: 4.0
+  },
+  {
+    id: 'black-sea',
+    name: 'Black Sea',
+    description: 'Russia-Ukraine maritime corridor, dense GPS jamming',
+    camera: { lon: 35.0, lat: 44.0, height: 1500000, pitch: -50 },
+    layers: { aircraft: true, vessels: true, satellites: false, jamming: true, restrictedAirspace: true, fires: false },
+    flyDuration: 4.0
+  },
+  {
+    id: 'natlantic',
+    name: 'North Atlantic Tracks',
+    description: 'Transatlantic flight corridor — busiest oceanic airspace on Earth',
+    camera: { lon: -40.0, lat: 50.0, height: 4000000, pitch: -55 },
+    layers: { aircraft: true, vessels: false, satellites: false, jamming: false, restrictedAirspace: false, fires: false },
+    flyDuration: 4.0
+  },
+  {
+    id: 'dmz',
+    name: 'Korean DMZ',
+    description: 'Demilitarized zone, NK ADIZ overlay',
+    camera: { lon: 127.5, lat: 38.0, height: 600000, pitch: -45 },
+    layers: { aircraft: true, vessels: true, satellites: false, jamming: false, restrictedAirspace: true, fires: false },
+    flyDuration: 4.0
+  },
+  {
+    id: 'california',
+    name: 'California Wildfire Belt',
+    description: 'Wildfire activity, airspace, seismic',
+    camera: { lon: -119.0, lat: 37.0, height: 1200000, pitch: -50 },
+    layers: { aircraft: true, vessels: false, satellites: false, jamming: false, restrictedAirspace: false, fires: true },
+    flyDuration: 4.0
+  },
+  {
+    id: 'russia-ukraine',
+    name: 'Russia / Ukraine',
+    description: 'Active conflict region — closed airspace, GPS jamming, vessel traffic',
+    camera: { lon: 36.0, lat: 49.0, height: 2500000, pitch: -50 },
+    layers: { aircraft: true, vessels: true, satellites: false, jamming: true, restrictedAirspace: true, fires: false },
+    flyDuration: 4.0
+  }
+];
+
+2. src/utils/theaters.ts — function flyToTheater(viewer, theater):
+   - viewer.camera.flyTo({
+       destination: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+       orientation: { heading: 0, pitch: Cesium.Math.toRadians(pitch), roll: 0 },
+       duration: theater.flyDuration,
+       easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT
+     })
+   - For each layer in theater.layers, store.setLayerVisible(layerName, value)
+
+3. Wire src/components/TheaterPanel.tsx — replace the existing console.log stubs. Each button now calls flyToTheater(viewer, theater).
+
+4. Description toast: when a theater is activated, show a small monospace card at the top-center of the screen for 4 seconds, fading in/out. Card shows theater.name in bold and theater.description below. Position: top: 60px, centered horizontally, max-width 500px, bg-slate-900/95, border border-cyan-500/30, padding 12px 16px. Fade animation: 300ms in, 300ms out, 4s visible.
+
+Definition of done:
+- 6 theaters listed in TheaterPanel
+- Click "Russia / Ukraine" → camera flies to Eastern Europe, jamming visible, restricted airspace polygons visible, vessels in Black Sea visible, description toast appears for 4s
+- Click "Strait of Hormuz" → camera flies to Persian Gulf, Iranian airspace polygon visible, jamming hexes red over Iran, vessels moving
+- All other theaters work similarly with their specific layer combinations
+- Restricted Airspace toggle in LayerToggles shows count of zones (5)
+- Click an airspace polygon → entity panel shows name + description
+- All polygon coordinates approximate but recognizable on the globe
+
+Do not touch the time scrubber, satellites, fires layer, or vessel/aircraft logic.

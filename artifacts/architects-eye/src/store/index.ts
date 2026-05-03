@@ -3,11 +3,13 @@ import type { Aircraft } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { BBox } from "../ws/aisstream-client";
+import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
 
 export type SelectedEntity =
   | { type: "aircraft"; id: string; data: Aircraft }
   | { type: "satellite"; id: string; data: SatelliteMeta }
-  | { type: "vessel"; id: string; data: VesselSelectionData };
+  | { type: "vessel"; id: string; data: VesselSelectionData }
+  | { type: "airspace"; id: string; data: RestrictedAirspaceZone };
 
 export interface Viewport {
   lat: number;
@@ -21,12 +23,20 @@ export type LayerKey =
   | "vessels"
   | "satellites"
   | "jamming"
+  | "restrictedAirspace"
   | "fires"
   | "quakes";
 
 export type LayerVisibility = Record<LayerKey, boolean>;
 
 export type LayerCounts = Record<LayerKey, number>;
+
+export interface TheaterToast {
+  name: string;
+  description: string;
+  // Monotonic id so consumers can re-trigger animations on the same name.
+  triggerId: number;
+}
 
 interface AppStore {
   selectedEntity: SelectedEntity | null;
@@ -46,7 +56,13 @@ interface AppStore {
 
   timeOffsetMs: number;
   setTimeOffsetMs: (ms: number) => void;
+
+  theaterToast: TheaterToast | null;
+  showTheaterToast: (t: { name: string; description: string }) => void;
+  clearTheaterToast: () => void;
 }
+
+let toastCounter = 0;
 
 export const useStore = create<AppStore>((set) => ({
   selectedEntity: null,
@@ -60,6 +76,7 @@ export const useStore = create<AppStore>((set) => ({
     vessels: true,
     satellites: true,
     jamming: false,
+    restrictedAirspace: true,
     fires: false,
     quakes: false,
   },
@@ -73,6 +90,7 @@ export const useStore = create<AppStore>((set) => ({
     vessels: true,
     satellites: true,
     jamming: true,
+    restrictedAirspace: true,
     fires: false,
     quakes: false,
   },
@@ -86,6 +104,7 @@ export const useStore = create<AppStore>((set) => ({
     vessels: 0,
     satellites: 0,
     jamming: 0,
+    restrictedAirspace: 0,
     fires: 0,
     quakes: 0,
   },
@@ -96,4 +115,11 @@ export const useStore = create<AppStore>((set) => ({
 
   timeOffsetMs: 0,
   setTimeOffsetMs: (ms) => set({ timeOffsetMs: ms }),
+
+  theaterToast: null,
+  showTheaterToast: ({ name, description }) =>
+    set({
+      theaterToast: { name, description, triggerId: ++toastCounter },
+    }),
+  clearTheaterToast: () => set({ theaterToast: null }),
 }));

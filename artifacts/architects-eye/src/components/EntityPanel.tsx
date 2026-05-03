@@ -2,6 +2,7 @@ import { useStore, type SelectedEntity } from "../store";
 import type { Aircraft } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
+import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
 import { decodeShipType } from "../ws/aisstream-client";
 
 function formatAlt(alt: Aircraft["alt_baro"]): string {
@@ -218,6 +219,61 @@ function VesselDetails({
   );
 }
 
+function AirspaceDetails({
+  zone,
+  onClose,
+}: {
+  zone: RestrictedAirspaceZone;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <PanelHeader label="Restricted Airspace" onClose={onClose} />
+      <HeroTitle title={zone.name} subtitle="Advisory" />
+      <div
+        style={{
+          display: "flex",
+          gap: "0.75rem",
+          alignItems: "flex-start",
+          padding: "0.875rem 1rem",
+          background: "rgba(239, 68, 68, 0.08)",
+          border: "1px solid rgba(239, 68, 68, 0.25)",
+          borderRadius: 2,
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            width: 22,
+            height: 22,
+            borderRadius: "50%",
+            background: "rgba(239, 68, 68, 0.2)",
+            color: "#fca5a5",
+            fontSize: "0.7rem",
+            fontStyle: "italic",
+            fontFamily: "serif",
+            fontWeight: 700,
+          }}
+        >
+          i
+        </span>
+        <div
+          style={{
+            color: "#e2e8f0",
+            fontSize: "0.78rem",
+            lineHeight: 1.5,
+          }}
+        >
+          {zone.description}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function PanelBody({
   selected,
   onClose,
@@ -230,6 +286,9 @@ function PanelBody({
   }
   if (selected.type === "satellite") {
     return <SatelliteDetails sat={selected.data} onClose={onClose} />;
+  }
+  if (selected.type === "airspace") {
+    return <AirspaceDetails zone={selected.data} onClose={onClose} />;
   }
   return <VesselDetails v={selected.data} onClose={onClose} />;
 }

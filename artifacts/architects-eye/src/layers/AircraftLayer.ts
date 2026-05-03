@@ -79,7 +79,14 @@ export class AircraftLayer {
       (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
         const picked = this.viewer.scene.pick(event.position);
         if (!Cesium.defined(picked)) {
-          useStore.getState().setSelectedEntity(null);
+          // Only deselect when the *current* selection is an aircraft.
+          // Other layers (satellites, vessels, airspace) own their own
+          // selections and would otherwise be clobbered because every
+          // ScreenSpaceEventHandler fires on the same LEFT_CLICK.
+          const cur = useStore.getState().selectedEntity;
+          if (cur && cur.type === "aircraft") {
+            useStore.getState().setSelectedEntity(null);
+          }
           return;
         }
         if (!(picked.id instanceof Cesium.Entity)) return;

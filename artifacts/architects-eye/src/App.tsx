@@ -3,6 +3,7 @@ import { EntityPanel } from "./components/EntityPanel";
 import { HeaderBar } from "./components/HeaderBar";
 import { LayerToggles } from "./components/LayerToggles";
 import { TheaterPanel } from "./components/TheaterPanel";
+import { TheaterToast } from "./components/TheaterToast";
 import { Timeline } from "./components/Timeline";
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
 
       <EntityPanel />
       <Timeline />
+      <TheaterToast />
     </div>
   );
 }

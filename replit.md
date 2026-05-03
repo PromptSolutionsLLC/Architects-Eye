@@ -29,6 +29,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Vessels** — live AISStream WebSocket via `/api/ws/vessels` (server filters PositionReport / StandardClassBPositionReport / ShipStaticData)
 - **Satellites** — `/api/tle` returns a bundled snapshot instantly (always works); a background refresh from celestrak's `gp.php` (currently WAF-blocked from this Replit egress) and falls back to `tle.ivanstanojevic.me` (paginated, 5000 most-popular sats). 24 h cache.
 - **Jamming** — static H3-hex CSV at `public/data/gpsjam-2026-05-01.csv`; cells with bad/total ≥ 5 % rendered as a red gradient via batched Cesium `Primitive` (`PolygonGeometry` per cell, `PerInstanceColorAppearance`).
+- **Restricted Airspace** — hardcoded simplified polygons in `src/data/restricted-airspace.ts` (Russia, Iran, North Korean ADIZ, Gaza, Eastern Ukraine). Rendered via `CustomDataSource` with translucent `PolygonGraphics` fill + dashed `PolylineGraphics` outline. Click → entity panel shows advisory.
+
+#### Theaters
+- 6 named camera presets in `src/data/theaters.ts` (Strait of Hormuz, Black Sea, North Atlantic Tracks, Korean DMZ, California Wildfire Belt, Russia/Ukraine).
+- `flyToTheater(viewer, theater)` in `src/utils/theaters.ts` flies the camera, applies the layer-visibility preset, and triggers the `TheaterToast` (top-center monospace card, 4 s with 300 ms fade).
+- `TheaterPanel` looks up the live Cesium viewer through `src/globe/viewer-handle.ts` (a tiny module-level setter/getter the `Viewer` component publishes to on mount).
 
 #### Source structure
 ```

@@ -12,6 +12,12 @@ const LAYERS: LayerSpec[] = [
   { key: "vessels", label: "Vessels", color: "#34d399", enabled: true },
   { key: "satellites", label: "Satellites", color: "#a855f7", enabled: true },
   { key: "jamming", label: "Jamming", color: "#ef4444", enabled: true },
+  {
+    key: "restrictedAirspace",
+    label: "Restricted Airspace",
+    color: "#ef4444",
+    enabled: true,
+  },
   { key: "fires", label: "Fires", color: "#f97316", enabled: false },
   { key: "quakes", label: "Quakes", color: "#facc15", enabled: false },
 ];

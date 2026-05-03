@@ -5,8 +5,10 @@ import { AircraftLayer } from "../layers/AircraftLayer";
 import { SatelliteLayer } from "../layers/SatelliteLayer";
 import { VesselLayer } from "../layers/VesselLayer";
 import { JammingLayer } from "../layers/JammingLayer";
+import { RestrictedAirspaceLayer } from "../layers/RestrictedAirspaceLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
+import { setViewer } from "./viewer-handle";
 
 export default function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -15,6 +17,9 @@ export default function Viewer() {
   const satelliteLayerRef = useRef<SatelliteLayer | null>(null);
   const vesselLayerRef = useRef<VesselLayer | null>(null);
   const jammingLayerRef = useRef<JammingLayer | null>(null);
+  const restrictedAirspaceLayerRef = useRef<RestrictedAirspaceLayer | null>(
+    null,
+  );
   const aisClientRef = useRef<AISStreamClient | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +53,7 @@ export default function Viewer() {
       });
 
       viewerRef.current = viewer;
+      setViewer(viewer);
 
       viewer.scene.globe.enableLighting = true;
       viewer.scene.skyAtmosphere.show = false;
@@ -147,6 +153,11 @@ export default function Viewer() {
       const jammingLayer = new JammingLayer(viewer);
       jammingLayerRef.current = jammingLayer;
       void jammingLayer.mount();
+
+      // Restricted airspace overlay (static polygons)
+      const restrictedAirspaceLayer = new RestrictedAirspaceLayer(viewer);
+      restrictedAirspaceLayerRef.current = restrictedAirspaceLayer;
+      void restrictedAirspaceLayer.mount();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -155,6 +166,8 @@ export default function Viewer() {
     }
 
     return () => {
+      restrictedAirspaceLayerRef.current?.destroy();
+      restrictedAirspaceLayerRef.current = null;
       jammingLayerRef.current?.destroy();
       jammingLayerRef.current = null;
       vesselLayerRef.current?.destroy();
@@ -169,6 +182,7 @@ export default function Viewer() {
         viewerRef.current.destroy();
       }
       viewerRef.current = null;
+      setViewer(null);
     };
   }, []);
 
