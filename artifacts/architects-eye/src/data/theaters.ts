@@ -57,7 +57,7 @@ export const THEATERS: TheaterDef[] = [
       // and give the camera a visible payoff over open water.
       vessels: true,
       submarineCables: true,
-      satellites: false,
+      satellites: true,
       jamming: false,
       // NAT entry/exit points are wrapped in restricted oceanic airspace.
       restrictedAirspace: true,
