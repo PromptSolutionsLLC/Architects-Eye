@@ -18,7 +18,7 @@ const LAYERS: LayerSpec[] = [
   { key: "jamming", label: "Jamming", color: "#ef4444", enabled: true },
   {
     key: "restrictedAirspace",
-    label: "Restricted Airspace",
+    label: "Airspace",
     color: "#ef4444",
     enabled: true,
   },
