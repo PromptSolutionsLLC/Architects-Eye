@@ -1,5 +1,5 @@
 import { useStore, type SelectedEntity } from "../store";
-import type { Aircraft, Fire } from "../utils/api";
+import type { Aircraft, Fire, Quake } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
@@ -334,6 +334,54 @@ function FireDetails({
   );
 }
 
+function formatUtc(ms: number): string {
+  // "YYYY-MM-DD HH:MM:SS UTC" from epoch ms.
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "—";
+  const iso = d.toISOString(); // e.g. 2026-05-03T07:30:21.123Z
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC`;
+}
+
+function QuakeDetails({
+  quake,
+  onClose,
+}: {
+  quake: Quake;
+  onClose: () => void;
+}) {
+  const heading = `M${quake.magnitude.toFixed(1)}`;
+  return (
+    <>
+      <PanelHeader label="Earthquake" onClose={onClose} />
+      <HeroTitle title={heading} subtitle="Magnitude" />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="Location" value={quake.place || "—"} />
+        <Row label="Depth" value={`${quake.depth_km.toFixed(1)} km`} accent />
+        <Row label="Time" value={formatUtc(quake.time_ms)} />
+        <div className="border-b border-slate-800/80 pb-3">
+          <div className="text-slate-500 text-xs tracking-widest uppercase mb-1">
+            USGS Link
+          </div>
+          {quake.url ? (
+            <a
+              href={quake.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm tracking-wide text-cyan-300 underline decoration-cyan-300/40 hover:decoration-cyan-300"
+            >
+              View on USGS
+            </a>
+          ) : (
+            <div className="font-mono text-sm tracking-wide text-slate-200">
+              —
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function PanelBody({
   selected,
   onClose,
@@ -352,6 +400,9 @@ function PanelBody({
   }
   if (selected.type === "fire") {
     return <FireDetails fire={selected.data} onClose={onClose} />;
+  }
+  if (selected.type === "quake") {
+    return <QuakeDetails quake={selected.data} onClose={onClose} />;
   }
   return <VesselDetails v={selected.data} onClose={onClose} />;
 }

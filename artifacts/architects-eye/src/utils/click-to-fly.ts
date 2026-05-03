@@ -4,7 +4,12 @@ import { useStore } from "../store";
 
 const FLY_DURATION_S = 1.5;
 
-export type FlyTargetType = "satellite" | "aircraft" | "vessel" | "fire";
+export type FlyTargetType =
+  | "satellite"
+  | "aircraft"
+  | "vessel"
+  | "fire"
+  | "quake";
 
 interface FlyParams {
   pitchRad: number;
@@ -18,6 +23,9 @@ const PARAMS: Record<FlyTargetType, FlyParams> = {
   aircraft: { pitchRad: Cesium.Math.toRadians(-30), rangeM: 8_000 },
   vessel: { pitchRad: Cesium.Math.toRadians(-30), rangeM: 5_000 },
   fire: { pitchRad: Cesium.Math.toRadians(-45), rangeM: 10_000 },
+  // Quakes: 30 km standoff per spec. Quakes don't move so no
+  // predictive propagation is involved.
+  quake: { pitchRad: Cesium.Math.toRadians(-45), rangeM: 30_000 },
 };
 
 interface SatellitePredictOpts {

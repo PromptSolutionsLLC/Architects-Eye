@@ -7,6 +7,7 @@ import { VesselLayer } from "../layers/VesselLayer";
 import { JammingLayer } from "../layers/JammingLayer";
 import { RestrictedAirspaceLayer } from "../layers/RestrictedAirspaceLayer";
 import { FiresLayer } from "../layers/FiresLayer";
+import { QuakesLayer } from "../layers/QuakesLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 import { setViewer } from "./viewer-handle";
@@ -30,6 +31,7 @@ export default function Viewer() {
     null,
   );
   const firesLayerRef = useRef<FiresLayer | null>(null);
+  const quakesLayerRef = useRef<QuakesLayer | null>(null);
   const aisClientRef = useRef<AISStreamClient | null>(null);
   const centralHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +212,11 @@ export default function Viewer() {
       firesLayerRef.current = firesLayer;
       void firesLayer.mount();
 
+      // USGS earthquake layer (M4.5+ past 7 days, off by default)
+      const quakesLayer = new QuakesLayer(viewer);
+      quakesLayerRef.current = quakesLayer;
+      void quakesLayer.mount();
+
       // ── Central pick handlers ─────────────────────────────────────
       // ONE LEFT_CLICK / MOUSE_MOVE handler shared by all layers.
       // Layers register resolvers via pick-resolvers.ts; we run a
@@ -267,6 +274,8 @@ export default function Viewer() {
         centralHandlerRef.current.destroy();
         centralHandlerRef.current = null;
       }
+      quakesLayerRef.current?.destroy();
+      quakesLayerRef.current = null;
       firesLayerRef.current?.destroy();
       firesLayerRef.current = null;
       restrictedAirspaceLayerRef.current?.destroy();

@@ -41,6 +41,37 @@ export interface Aircraft {
   r?: string;
 }
 
+export interface Quake {
+  id: string;
+  lat: number;
+  lon: number;
+  depth_km: number;
+  magnitude: number;
+  place: string;
+  time_ms: number;
+  url: string;
+}
+
+export interface QuakesResponse {
+  quakes: Quake[];
+  source: "live" | "stale-cache" | "fallback-empty";
+  fetchedAt: number;
+}
+
+export async function fetchQuakes(): Promise<QuakesResponse> {
+  try {
+    const res = await fetch("/api/quakes");
+    if (!res.ok) {
+      console.warn(`[Quakes] Proxy error ${res.status}`);
+      return { quakes: [], source: "fallback-empty", fetchedAt: Date.now() };
+    }
+    return (await res.json()) as QuakesResponse;
+  } catch (err) {
+    console.warn("[Quakes] Fetch failed:", err);
+    return { quakes: [], source: "fallback-empty", fetchedAt: Date.now() };
+  }
+}
+
 export async function fetchAircraft(
   lat: number,
   lon: number,

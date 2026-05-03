@@ -5,6 +5,10 @@ interface LayerSpec {
   label: string;
   color: string;
   enabled: boolean;
+  // When true, the count cell renders "---" until the layer flips
+  // available=true (i.e. data is loaded). Used for layers whose
+  // initial fetch is on the order of seconds.
+  showLoadingPlaceholder?: boolean;
 }
 
 const LAYERS: LayerSpec[] = [
@@ -19,7 +23,13 @@ const LAYERS: LayerSpec[] = [
     enabled: true,
   },
   { key: "fires", label: "Fires", color: "#f97316", enabled: true },
-  { key: "quakes", label: "Quakes", color: "#facc15", enabled: false },
+  {
+    key: "quakes",
+    label: "Quakes",
+    color: "#facc15",
+    enabled: true,
+    showLoadingPlaceholder: true,
+  },
 ];
 
 interface RowProps {
@@ -69,11 +79,18 @@ function LayerRow({ spec }: RowProps) {
   const setLayerVisible = useStore((s) => s.setLayerVisible);
 
   // If the layer was marked unavailable at runtime (e.g. WS failed),
-  // hide the row entirely per spec.
-  if (spec.enabled && !available) return null;
+  // hide the row entirely per spec — UNLESS the layer opts into a
+  // loading placeholder (initial !available is the "still fetching"
+  // state, not a permanent failure).
+  if (spec.enabled && !available && !spec.showLoadingPlaceholder) return null;
 
   const isDisabled = !spec.enabled;
   const dim = isDisabled ? "opacity-45" : "";
+  const countLabel = !spec.enabled
+    ? "---"
+    : spec.showLoadingPlaceholder && !available
+      ? "---"
+      : count.toString().padStart(3, "0");
 
   return (
     <div
@@ -92,7 +109,7 @@ function LayerRow({ spec }: RowProps) {
           {spec.label}
         </span>
         <span className="font-mono text-[10px] tracking-wider text-slate-500">
-          {spec.enabled ? count.toString().padStart(3, "0") : "---"}
+          {countLabel}
         </span>
       </div>
       <ToggleSwitch

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Aircraft, Fire } from "../utils/api";
+import type { Aircraft, Fire, Quake } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { BBox } from "../ws/aisstream-client";
@@ -10,7 +10,8 @@ export type SelectedEntity =
   | { type: "satellite"; id: string; data: SatelliteMeta }
   | { type: "vessel"; id: string; data: VesselSelectionData }
   | { type: "airspace"; id: string; data: RestrictedAirspaceZone }
-  | { type: "fire"; id: string; data: Fire };
+  | { type: "fire"; id: string; data: Fire }
+  | { type: "quake"; id: string; data: Quake };
 
 export interface Viewport {
   lat: number;
@@ -96,6 +97,9 @@ export const useStore = create<AppStore>((set) => ({
     jamming: true,
     restrictedAirspace: true,
     fires: true,
+    // Starts false so the LayerToggles row shows "---" until the
+    // first /api/quakes response flips it to true (or until it
+    // becomes a permanent failure).
     quakes: false,
   },
   setLayerAvailable: (layer, available) =>

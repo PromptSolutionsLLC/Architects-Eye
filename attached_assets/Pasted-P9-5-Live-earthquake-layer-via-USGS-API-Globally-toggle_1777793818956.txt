@@ -1,0 +1,82 @@
+P9.5: Live earthquake layer via USGS API. Globally toggleable. No theater addition. 45 minute cap.
+
+Data source: USGS Earthquake API
+- URL: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson
+- Past 7 days, M4.5+ globally. ~150-300 events typical.
+- No auth, no key. Public.
+- GeoJSON FeatureCollection. Each Feature has geometry.coordinates [lon, lat, depth_km] and properties { mag, place, time, url, type, ... }
+- USGS `time` field is Unix epoch milliseconds (number), not ISO string.
+
+Server side:
+
+1. server/src/routes/quakes.ts — Express GET /api/quakes:
+   - Fetch USGS URL with 15-second timeout
+   - Cache parsed response 15 minutes in-memory (single global cache entry, refreshed on TTL expiry — same pattern as fires.ts)
+   - Parse GeoJSON: for each feature, emit { id: feature.id, lat: coords[1], lon: coords[0], depth_km: coords[2], magnitude: properties.mag, place: properties.place, time_ms: properties.time, url: properties.url }
+   - On upstream failure (timeout, non-200, JSON parse error): if cache exists and is stale → return cache with source="stale-cache". If no cache → return { quakes: [], source: "fallback-empty" }
+   - Return shape: { quakes: [...], source: "live" | "stale-cache" | "fallback-empty" }
+   - ALWAYS returns HTTP 200 with valid JSON shape
+
+2. Register route in server/src/index.ts alongside aircraft/tle/fires routes.
+
+Client side:
+
+3. src/utils/api.ts — fetchQuakes() with typed return matching server response.
+
+4. src/layers/QuakesLayer.ts:
+   - Fetch on mount, refresh every 15 min via setInterval. Clear interval on destroy.
+   - Single Cesium.PointPrimitiveCollection added to viewer.scene.primitives. Same lifecycle pattern as FiresLayer.
+   - pixelSize by magnitude (range checks use lower-inclusive, upper-exclusive):
+     - 4.5 ≤ mag < 5.5: 4
+     - 5.5 ≤ mag < 6.5: 7
+     - 6.5 ≤ mag < 7.5: 10
+     - mag ≥ 7.5: 14
+   - color by magnitude (Cesium.Color.fromCssColorString):
+     - 4.5 ≤ mag < 5.5: #facc15 (yellow)
+     - 5.5 ≤ mag < 6.5: #fb923c (orange)
+     - 6.5 ≤ mag < 7.5: #ef4444 (red)
+     - mag ≥ 7.5: #d946ef (magenta)
+   - outlineWidth: 0
+   - Subscribe to store.layerVisibility.quakes — toggle the PointPrimitiveCollection's .show property
+   - Default store.layerVisibility.quakes = false (off — does not auto-enable on any theater or load)
+   - Stamp .id on each PointPrimitive = quake.id (USGS event ID string, e.g. "us6000abcd")
+   - Position: Cesium.Cartesian3.fromDegrees(lon, lat, -depth_km * 1000) — depth is below surface so height is negative meters
+
+5. Click pick-resolver registration (NOT a per-layer LEFT_CLICK handler):
+   - Per the P11 centralized click architecture, QuakesLayer registers a pick resolver function with the central handler.
+   - Resolver: input picked object → if picked.primitive is a PointPrimitive belonging to the QuakesLayer collection AND picked.primitive.id matches a known quake id, return { type: 'quake', id, data: { lat, lon, depth_km, magnitude, place, time_ms, url } }; else return null.
+   - Resolver priority slot: insert between fire and satellite (airspace → fire → quake → satellite → aircraft → vessel).
+
+6. EntityPanel.tsx — handle type 'quake':
+   - Header: "M" + magnitude.toFixed(1) (e.g. "M5.7")
+   - LOCATION row: place string from USGS (may be like "121km SSE of Town, Country")
+   - DEPTH row: depth_km.toFixed(1) + " km"
+   - TIME row: new Date(time_ms).toISOString() formatted as "YYYY-MM-DD HH:MM:SS UTC"
+   - USGS LINK row: anchor with text "View on USGS", href = quake.url, target="_blank", rel="noopener noreferrer"
+
+7. LayerToggles.tsx — quakes row:
+   - Make interactive (currently disabled / "Coming soon")
+   - Count = quakes.length when loaded, "---" while fetching
+   - Remove "Coming soon" tooltip
+
+8. Click-to-fly registry — ADD 'quake' to the P10.5 allowlist with these params:
+   - Position resolution: Cesium.Cartesian3.fromDegrees(quake.lon, quake.lat, -quake.depth_km * 1000)
+   - Heading: 0
+   - Pitch: Cesium.Math.toRadians(-45)
+   - Range: 30000 m
+   - Quakes use current-position targeting only (no predictive propagation — they don't move).
+   - Quake fly is interruptible by other clicks via the P10.5 cancellation logic (no special-casing).
+
+DEFINITION OF DONE:
+- GET /api/quakes returns 150-300 quakes globally on first call (cold cache), <1s subsequent calls (warm cache)
+- Toggle "Quakes" on → colored points appear globally; dense clusters visible in Pacific Ring of Fire, Japan, Indonesia, Chile, California
+- Click a quake point → EntityPanel populates with M/place/depth/time/USGS link
+- Click triggers click-to-fly: camera arrives 30km off the quake at -45° pitch, point centered in frame
+- Clicking the "View on USGS" link opens a new tab to the USGS event page (does NOT navigate the current tab)
+- Live API failure (simulate by killing internet briefly) → empty layer, no crash, console logs the source field, app stays responsive
+- Toggle "Quakes" off → all quake points hide, count remains visible in toggle row
+
+DO NOT TOUCH:
+- Theater system, restricted airspace, trails, fires layer fetch/render, satellite layer/LOD/predict, click-to-fly logic for other entity types, EntityPanel content for other types, LayerToggles styling beyond the quakes row, P11 click handler architecture (only ADD a resolver to the registry).
+
+Pure additive layer + minimal click-to-fly registry extension + EntityPanel type extension. No refactors of existing code paths.
