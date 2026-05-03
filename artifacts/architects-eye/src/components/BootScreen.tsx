@@ -59,12 +59,13 @@ export function BootScreen() {
 
     const beginFade = () => {
       if (cancelled) return;
+      // NOTE: do NOT schedule the fade→done timer here. Calling
+      // setPhase("fading") triggers a re-render whose cleanup would
+      // cancel any timer pushed onto `timers`, leaving the boot
+      // screen stuck at opacity:0 and (with pointer-events:auto)
+      // eating every click on the page. The fade→done transition
+      // is handled by a separate useEffect below.
       setPhase("fading");
-      timers.push(
-        setTimeout(() => {
-          if (!cancelled) setPhase("done");
-        }, FADE_MS),
-      );
     };
 
     const typeLine = (lineIdx: number, charIdx: number) => {
@@ -107,6 +108,15 @@ export function BootScreen() {
     };
   }, [skipMount, phase]);
 
+  // Independent fade→done timer. Lives in its own effect so it is
+  // immune to the typing effect's cleanup (which fires the moment
+  // phase changes to "fading").
+  useEffect(() => {
+    if (phase !== "fading") return;
+    const t = setTimeout(() => setPhase("done"), FADE_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   // ESC key → skip
   useEffect(() => {
     if (skipMount || phase === "done") return;
@@ -140,7 +150,13 @@ export function BootScreen() {
         fontSize: 14,
         lineHeight: 1.7,
         letterSpacing: 0.5,
-        cursor: "pointer",
+        // While fading we MUST drop pointer-events so clicks fall
+        // through to the globe / UI underneath even if React holds
+        // the node in the DOM for one extra frame, and as a safety
+        // net against any future bug that could pin phase to
+        // "fading" indefinitely.
+        cursor: phase === "fading" ? "default" : "pointer",
+        pointerEvents: phase === "fading" ? "none" : "auto",
         opacity: phase === "fading" ? 0 : 1,
         transition: `opacity ${FADE_MS}ms ease-in-out`,
         userSelect: "none",
