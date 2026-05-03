@@ -105,11 +105,12 @@ export class QuakesLayer {
     return {
       selected: { type: "quake", id: quake.id, data: quake },
       fly: () => {
-        const pos = Cesium.Cartesian3.fromDegrees(
-          quake.lon,
-          quake.lat,
-          -quake.depth_km * 1000,
-        );
+        // Render/target at the surface epicenter. Depth is metadata
+        // (shown in EntityPanel), not a position offset — placing the
+        // point below the surface (especially for >100km deep quakes)
+        // pushes it inside the globe where it renders behind the
+        // ellipsoid from most camera angles.
+        const pos = Cesium.Cartesian3.fromDegrees(quake.lon, quake.lat, 0);
         flyToInspect(this.viewer, pos, "quake");
       },
     };
@@ -166,11 +167,8 @@ export class QuakesLayer {
       this.quakesById.set(q.id, q);
       const id: PickIdPayload = { layer: "quakes", quakeId: q.id };
       this.collection.add({
-        position: Cesium.Cartesian3.fromDegrees(
-          q.lon,
-          q.lat,
-          -q.depth_km * 1000,
-        ),
+        // Surface epicenter — see fly() comment above for rationale.
+        position: Cesium.Cartesian3.fromDegrees(q.lon, q.lat, 0),
         color: colorForMag(q.magnitude),
         pixelSize: pixelSizeForMag(q.magnitude),
         outlineWidth: 0,

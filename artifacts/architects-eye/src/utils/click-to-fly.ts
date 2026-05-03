@@ -320,11 +320,9 @@ export function flyToSelected(
     }
     case "quake": {
       const q = entity.data;
-      const pos = Cesium.Cartesian3.fromDegrees(
-        q.lon,
-        q.lat,
-        -q.depth_km * 1000,
-      );
+      // Camera target is the surface epicenter — depth is metadata,
+      // not a position offset. See QuakesLayer for full rationale.
+      const pos = Cesium.Cartesian3.fromDegrees(q.lon, q.lat, 0);
       console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
       flyToInspect(viewer, pos, "quake");
       return;
