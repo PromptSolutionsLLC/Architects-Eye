@@ -1,3 +1,34 @@
+export interface Fire {
+  lat: number;
+  lon: number;
+  confidence: string;
+  frp: number;
+  brightness: number;
+  acq_date: string;
+  acq_time: string;
+  source: "VIIRS_SNPP_NRT" | "MODIS_C6_1";
+}
+
+export interface FiresResponse {
+  fires: Fire[];
+  source: "live" | "fallback" | "stale-cache";
+  fetchedAt: number;
+}
+
+export async function fetchFires(): Promise<FiresResponse> {
+  try {
+    const res = await fetch("/api/fires");
+    if (!res.ok) {
+      console.warn(`[Fires] Proxy error ${res.status}`);
+      return { fires: [], source: "fallback", fetchedAt: Date.now() };
+    }
+    return (await res.json()) as FiresResponse;
+  } catch (err) {
+    console.warn("[Fires] Fetch failed:", err);
+    return { fires: [], source: "fallback", fetchedAt: Date.now() };
+  }
+}
+
 export interface Aircraft {
   hex: string;
   flight?: string;

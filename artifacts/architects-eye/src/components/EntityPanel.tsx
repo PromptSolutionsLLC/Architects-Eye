@@ -1,5 +1,5 @@
 import { useStore, type SelectedEntity } from "../store";
-import type { Aircraft } from "../utils/api";
+import type { Aircraft, Fire } from "../utils/api";
 import type { SatelliteMeta } from "../utils/tle";
 import type { VesselSelectionData } from "../layers/VesselLayer";
 import type { RestrictedAirspaceZone } from "../data/restricted-airspace";
@@ -274,6 +274,66 @@ function AirspaceDetails({
   );
 }
 
+function decodeFireConfidence(c: string, source: Fire["source"]): string {
+  if (source === "VIIRS_SNPP_NRT") {
+    const cl = c.toLowerCase();
+    if (cl === "h") return "High";
+    if (cl === "n") return "Nominal";
+    if (cl === "l") return "Low";
+    return c || "—";
+  }
+  // MODIS numeric
+  const n = Number.parseFloat(c);
+  if (!Number.isFinite(n)) return c || "—";
+  if (n >= 70) return `High (${Math.round(n)}%)`;
+  if (n >= 30) return `Nominal (${Math.round(n)}%)`;
+  return `Low (${Math.round(n)}%)`;
+}
+
+function formatAcqTime(t: string): string {
+  // FIRMS uses HHMM zero-padded e.g. "0030" → "00:30 UTC"
+  const padded = t.padStart(4, "0");
+  if (padded.length !== 4) return t;
+  return `${padded.slice(0, 2)}:${padded.slice(2)} UTC`;
+}
+
+function FireDetails({
+  fire,
+  onClose,
+}: {
+  fire: Fire;
+  onClose: () => void;
+}) {
+  const lat = fire.lat.toFixed(4);
+  const lon = fire.lon.toFixed(4);
+  const sensor =
+    fire.source === "VIIRS_SNPP_NRT" ? "VIIRS Suomi-NPP" : "MODIS C6.1";
+  return (
+    <>
+      <PanelHeader label="Wildfire" onClose={onClose} />
+      <HeroTitle title="Active Fire Pixel" subtitle={sensor} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <Row label="Coordinates" value={`${lat}, ${lon}`} />
+        <Row
+          label="Fire radiative power"
+          value={`${fire.frp.toFixed(1)} MW`}
+          accent
+        />
+        <Row
+          label="Confidence"
+          value={decodeFireConfidence(fire.confidence, fire.source)}
+        />
+        <Row
+          label="Brightness"
+          value={fire.brightness > 0 ? `${fire.brightness.toFixed(1)} K` : "—"}
+        />
+        <Row label="Acquired" value={fire.acq_date || "—"} />
+        <Row label="Acq. time" value={fire.acq_time ? formatAcqTime(fire.acq_time) : "—"} />
+      </div>
+    </>
+  );
+}
+
 function PanelBody({
   selected,
   onClose,
@@ -289,6 +349,9 @@ function PanelBody({
   }
   if (selected.type === "airspace") {
     return <AirspaceDetails zone={selected.data} onClose={onClose} />;
+  }
+  if (selected.type === "fire") {
+    return <FireDetails fire={selected.data} onClose={onClose} />;
   }
   return <VesselDetails v={selected.data} onClose={onClose} />;
 }

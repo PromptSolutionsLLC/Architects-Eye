@@ -6,6 +6,7 @@ import { SatelliteLayer } from "../layers/SatelliteLayer";
 import { VesselLayer } from "../layers/VesselLayer";
 import { JammingLayer } from "../layers/JammingLayer";
 import { RestrictedAirspaceLayer } from "../layers/RestrictedAirspaceLayer";
+import { FiresLayer } from "../layers/FiresLayer";
 import { AISStreamClient } from "../ws/aisstream-client";
 import { useStore } from "../store";
 import { setViewer } from "./viewer-handle";
@@ -20,6 +21,7 @@ export default function Viewer() {
   const restrictedAirspaceLayerRef = useRef<RestrictedAirspaceLayer | null>(
     null,
   );
+  const firesLayerRef = useRef<FiresLayer | null>(null);
   const aisClientRef = useRef<AISStreamClient | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,6 +184,11 @@ export default function Viewer() {
       const restrictedAirspaceLayer = new RestrictedAirspaceLayer(viewer);
       restrictedAirspaceLayerRef.current = restrictedAirspaceLayer;
       void restrictedAirspaceLayer.mount();
+
+      // FIRMS wildfire layer (live VIIRS, MODIS fallback)
+      const firesLayer = new FiresLayer(viewer);
+      firesLayerRef.current = firesLayer;
+      void firesLayer.mount();
     } catch (err) {
       console.error("Cesium Viewer initialization failed:", err);
       setError(
@@ -190,6 +197,8 @@ export default function Viewer() {
     }
 
     return () => {
+      firesLayerRef.current?.destroy();
+      firesLayerRef.current = null;
       restrictedAirspaceLayerRef.current?.destroy();
       restrictedAirspaceLayerRef.current = null;
       jammingLayerRef.current?.destroy();

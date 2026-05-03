@@ -18,7 +18,7 @@ const LAYERS: LayerSpec[] = [
     color: "#ef4444",
     enabled: true,
   },
-  { key: "fires", label: "Fires", color: "#f97316", enabled: false },
+  { key: "fires", label: "Fires", color: "#f97316", enabled: true },
   { key: "quakes", label: "Quakes", color: "#facc15", enabled: false },
 ];
 
