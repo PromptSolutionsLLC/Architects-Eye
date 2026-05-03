@@ -1,6 +1,7 @@
 import * as Cesium from "cesium";
 import { fetchAircraft, type Aircraft } from "../utils/api";
 import { useStore } from "../store";
+import { flyToInspect } from "../utils/click-to-fly";
 
 const POLL_INTERVAL_MS = 12_000;
 const STALE_MS = 60_000;
@@ -127,6 +128,10 @@ export class AircraftLayer {
             id: hex,
             data: entry.ac,
           });
+          const pos = entry.positionProperty.getValue(
+            this.viewer.clock.currentTime,
+          );
+          if (pos) flyToInspect(this.viewer, pos, 8000, -45);
         }
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,

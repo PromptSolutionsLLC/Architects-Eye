@@ -10,6 +10,7 @@ import {
   type SatelliteMeta,
 } from "../utils/tle";
 import SatelliteWorker from "../workers/sgp4.worker?worker";
+import { flyToInspect } from "../utils/click-to-fly";
 
 const TICK_INTERVAL_MS = 1000;
 const SAT_TRAIL_HALF_WINDOW_S = 1800;
@@ -217,6 +218,8 @@ export class SatelliteLayer {
           id: meta.noradId,
           data: meta,
         });
+        const pos = this.currentPositions[satIndex];
+        if (pos) flyToInspect(this.viewer, pos, 50_000, -45);
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );

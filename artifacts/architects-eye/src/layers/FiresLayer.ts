@@ -1,6 +1,7 @@
 import * as Cesium from "cesium";
 import { useStore } from "../store";
 import { fetchFires, type Fire } from "../utils/api";
+import { flyToInspect } from "../utils/click-to-fly";
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -82,6 +83,8 @@ export class FiresLayer {
           id: `fire-${id.fireIndex}`,
           data: fire,
         });
+        const pos = Cesium.Cartesian3.fromDegrees(fire.lon, fire.lat);
+        flyToInspect(this.viewer, pos, 10_000, -45);
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );

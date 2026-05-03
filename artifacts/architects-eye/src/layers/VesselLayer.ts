@@ -5,6 +5,7 @@ import {
   type VesselPosition,
   type VesselStatic,
 } from "../ws/aisstream-client";
+import { flyToInspect } from "../utils/click-to-fly";
 
 const STALE_MS = 5 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 30_000;
@@ -147,6 +148,10 @@ export class VesselLayer {
           id: String(mmsi),
           data,
         });
+        const pos = entry.positionProperty.getValue(
+          this.viewer.clock.currentTime,
+        );
+        if (pos) flyToInspect(this.viewer, pos, 5000, -45);
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );

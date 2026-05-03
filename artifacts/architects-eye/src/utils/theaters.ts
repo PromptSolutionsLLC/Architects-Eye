@@ -1,6 +1,7 @@
 import * as Cesium from "cesium";
 import { useStore, type LayerKey } from "../store";
 import type { TheaterDef } from "../data/theaters";
+import { markTheaterFly } from "./click-to-fly";
 
 export function flyToTheater(
   viewer: Cesium.Viewer,
@@ -15,6 +16,9 @@ export function flyToTheater(
       setLayerVisible(key as LayerKey, value);
     }
   }
+
+  // Mark theater fly window so click-to-fly is suppressed for its duration.
+  markTheaterFly(theater.flyDuration);
 
   // Fly the camera.
   viewer.camera.flyTo({
