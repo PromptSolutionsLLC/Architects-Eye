@@ -111,13 +111,13 @@ interface AppStore {
   // ── Replay scrubber (P13) ───────────────────────────────────────
   playbackMode: PlaybackMode;
   replayTimestamp_ms: number | null;
-  replaySpeed: 1 | 2;
+  replaySpeed: 1 | 15;
   replayPlaying: boolean;
   bufferRange: BufferRange | null;
   enterReplay: (timestamp_ms: number) => void;
   exitReplay: () => void;
   setReplayTimestamp: (ms: number) => void;
-  setReplaySpeed: (s: 1 | 2) => void;
+  setReplaySpeed: (s: 1 | 15) => void;
   togglePlayPause: () => void;
   setBufferRange: (range: BufferRange | null) => void;
 }

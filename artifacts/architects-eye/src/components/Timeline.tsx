@@ -279,7 +279,7 @@ export function Timeline() {
   };
 
   const handleSpeedClick = () => {
-    setReplaySpeed(replaySpeed === 1 ? 2 : 1);
+    setReplaySpeed(replaySpeed === 1 ? 15 : 1);
   };
 
   const playDisabled = !isReplay;
