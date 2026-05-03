@@ -86,6 +86,8 @@ export class VesselLayer {
   private currentVisibility = false;
   private pruneTimer: number | null = null;
   private trailedMmsi: number | null = null;
+  // [DIAGNOSTIC] Per-selection 10s position tick logger
+  private vesselTickTimer: number | null = null;
 
   constructor(viewer: Cesium.Viewer, client: AISStreamClient) {
     this.viewer = viewer;
@@ -170,6 +172,10 @@ export class VesselLayer {
       this.unsubscribeSelection = null;
     }
     this.trailedMmsi = null;
+    if (this.vesselTickTimer != null) {
+      window.clearInterval(this.vesselTickTimer);
+      this.vesselTickTimer = null;
+    }
     if (!this.viewer.isDestroyed()) {
       for (const { entity } of this.entries.values()) {
         this.viewer.entities.remove(entity);
@@ -202,6 +208,37 @@ export class VesselLayer {
         next.entity.path = makeVesselPath();
         this.trailedMmsi = newMmsi;
       }
+    }
+
+    // [DIAGNOSTIC] Tick logger for the currently selected vessel
+    if (this.vesselTickTimer != null) {
+      window.clearInterval(this.vesselTickTimer);
+      this.vesselTickTimer = null;
+    }
+    if (newMmsi != null) {
+      const mmsi = newMmsi;
+      this.vesselTickTimer = window.setInterval(() => {
+        const e = this.entries.get(mmsi);
+        if (!e || !e.lastPos) {
+          console.log(`[VESSEL TICK] MMSI=${mmsi} (no entry / no lastPos)`);
+          return;
+        }
+        let entLat: number | null = null;
+        let entLon: number | null = null;
+        const cart = e.entity.position?.getValue(
+          this.viewer.clock.currentTime,
+        );
+        if (cart) {
+          const carto = Cesium.Cartographic.fromCartesian(cart);
+          entLat = +Cesium.Math.toDegrees(carto.latitude).toFixed(5);
+          entLon = +Cesium.Math.toDegrees(carto.longitude).toFixed(5);
+        }
+        console.log(
+          `[VESSEL TICK] MMSI=${mmsi} storeUpdate=${e.lastSeen} ` +
+            `storeLat=${e.lastPos.lat.toFixed(5)} storeLon=${e.lastPos.lon.toFixed(5)} ` +
+            `entityLat=${entLat} entityLon=${entLon}`,
+        );
+      }, 10_000);
     }
   }
 

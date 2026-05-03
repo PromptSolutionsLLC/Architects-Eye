@@ -122,6 +122,23 @@ export default function Viewer() {
         ),
       );
 
+      // [DIAGNOSTIC] Show on-screen FPS widget
+      viewer.scene.debugShowFramesPerSecond = true;
+
+      // [DIAGNOSTIC] Manual FPS counter via postRender
+      let frames = 0;
+      let fpsWindowStart = performance.now();
+      let lastFps = 0;
+      viewer.scene.postRender.addEventListener(() => {
+        frames++;
+        const now = performance.now();
+        if (now - fpsWindowStart >= 1000) {
+          lastFps = Math.round((frames * 1000) / (now - fpsWindowStart));
+          frames = 0;
+          fpsWindowStart = now;
+        }
+      });
+
       // Google Photorealistic 3D Tiles
       (async () => {
         try {
@@ -131,6 +148,43 @@ export default function Viewer() {
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
+
+            // [DIAGNOSTIC] Tileset config dump
+            const t = tileset as unknown as Record<string, unknown>;
+            console.log("[TILESET CONFIG]", {
+              maximumScreenSpaceError: t.maximumScreenSpaceError,
+              maximumMemoryUsage: t.maximumMemoryUsage,
+              cacheBytes: t.cacheBytes,
+              dynamicScreenSpaceError: t.dynamicScreenSpaceError,
+              dynamicScreenSpaceErrorDensity: t.dynamicScreenSpaceErrorDensity,
+              dynamicScreenSpaceErrorFactor: t.dynamicScreenSpaceErrorFactor,
+              preloadWhenHidden: t.preloadWhenHidden,
+              preloadFlightDestinations: t.preloadFlightDestinations,
+            });
+
+            // [DIAGNOSTIC] Tile failures
+            tileset.tileFailed.addEventListener(
+              (error: { url: string; message: string }) => {
+                console.warn("[TILE FAIL]", error.url, error.message);
+              },
+            );
+
+            // [DIAGNOSTIC] 5s interval stats dump
+            const statsTimer = setInterval(() => {
+              const v = viewerRef.current;
+              if (!v || v.isDestroyed()) {
+                clearInterval(statsTimer);
+                return;
+              }
+              const s = (tileset as unknown as { statistics: Record<string, number> }).statistics;
+              console.log("[TILESET STATS]", {
+                ready: s.numberOfTilesWithContentReady,
+                pending: s.numberOfPendingRequests,
+                attempted: s.numberOfAttemptedRequests,
+                cameraAltM: Math.round(v.camera.positionCartographic.height),
+                fps: lastFps,
+              });
+            }, 5000);
           }
         } catch (err) {
           console.error("Failed to load Google Photorealistic 3D Tiles:", err);
