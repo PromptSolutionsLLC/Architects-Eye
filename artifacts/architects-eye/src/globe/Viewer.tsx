@@ -156,6 +156,13 @@ export default function Viewer() {
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
 
+            // FIX: dynamicScreenSpaceError raises the SSE threshold for
+            // tiles away from screen center, causing the tileset to stop
+            // requesting children for oblique-half tiles at low altitude.
+            // Result was a hard LOD seam (full detail vs parent-only).
+            // Disabling forces uniform refinement across the view.
+            tileset.dynamicScreenSpaceError = false;
+
             // [DIAGNOSTIC] Colorize photoreal tiles so we can visually
             // identify which parts of the view are covered by the tileset
             // vs. some other surface (globe, background, skybox).
