@@ -253,6 +253,7 @@ export default function Viewer() {
             // Centralized fly wrapper — same path as the header search
             // box. Per-type dispatch lives in click-to-fly.ts so both
             // selection surfaces share identical fly behavior.
+            console.log("[CENTRAL CLICK FIRING FLY]", result.selected.type);
             flyToSelected(viewer, result.selected);
           }
         },

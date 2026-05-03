@@ -173,6 +173,7 @@ export function flyToInspect(
       offset: new Cesium.HeadingPitchRange(0, pitchRad, rangeM),
     })
     .then(cleanup, cleanup);
+  console.log("[FLY INVOKED]", type, "flyTo called with target:", target);
 }
 
 /**
@@ -190,6 +191,20 @@ export function flyToSelected(
   viewer: Cesium.Viewer | null,
   entity: SelectedEntity,
 ): void {
+  console.log(
+    "[FLY ENTRY]",
+    entity.type,
+    "data keys:",
+    Object.keys(entity.data || {}),
+  );
+  console.log("[FLY THEATER GATE]", isTheaterFlying());
+  console.log(
+    "[FLY VIEWER]",
+    "present:",
+    !!viewer,
+    "destroyed:",
+    viewer ? viewer.isDestroyed() : "n/a",
+  );
   if (!viewer || viewer.isDestroyed()) return;
   switch (entity.type) {
     case "aircraft": {
@@ -209,6 +224,7 @@ export function flyToSelected(
             : 0;
       const altM = Math.max(0, altFt * 0.3048);
       const pos = Cesium.Cartesian3.fromDegrees(a.lon, a.lat, altM);
+      console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
       flyToInspect(viewer, pos, "aircraft");
       return;
     }
@@ -221,6 +237,7 @@ export function flyToSelected(
         return;
       }
       const pos = Cesium.Cartesian3.fromDegrees(v.lon, v.lat, 0);
+      console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
       flyToInspect(viewer, pos, "vessel");
       return;
     }
@@ -258,6 +275,7 @@ export function flyToSelected(
           gd.latitude,
           gd.height * 1000,
         );
+        console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
         flyToInspect(viewer, pos, "satellite", {
           predict: { noradId: m.noradId, line1: m.line1, line2: m.line2 },
         });
@@ -278,12 +296,14 @@ export function flyToSelected(
         q.lat,
         -q.depth_km * 1000,
       );
+      console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
       flyToInspect(viewer, pos, "quake");
       return;
     }
     case "fire": {
       const f = entity.data;
       const pos = Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 0);
+      console.log("[FLY BRANCH]", entity.type, "computed position:", pos);
       flyToInspect(viewer, pos, "fire");
       return;
     }

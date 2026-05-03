@@ -127,6 +127,7 @@ export function SearchBox() {
     // for a layer that was just toggled on by setLayerVisible above).
     const opened = useStore.getState().replaceUnpinnedCards(cr.selected);
     if (opened) {
+      console.log("[SEARCH FIRING FLY]", cr.selected.type);
       flyToSelected(getViewer(), cr.selected);
     }
 
