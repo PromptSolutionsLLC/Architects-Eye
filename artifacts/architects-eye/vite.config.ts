@@ -49,10 +49,34 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "src"),
-      "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
-    },
+    alias: [
+      { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
+      {
+        find: "@assets",
+        replacement: path.resolve(
+          import.meta.dirname,
+          "..",
+          "..",
+          "attached_assets",
+        ),
+      },
+      // satellite.js v7 dynamically imports two wasm-build entries
+      // (#wasm-single-thread / #wasm-multi-thread). Both pull in
+      // node:module / node:worker_threads and the pthreads one uses
+      // top-level await — neither is browser-safe and Rollup's iife
+      // output rejects TLA. We only use the pure-JS classic API, so
+      // alias both wasm-build entries to a stub that throws if ever
+      // invoked. See src/lib/satellite-wasm-stub.ts for full context.
+      {
+        find: /^.*satellite\.js\/wasm-build\/(base|pthreads)-release\/index\.js$/,
+        replacement: path.resolve(
+          import.meta.dirname,
+          "src",
+          "lib",
+          "satellite-wasm-stub.ts",
+        ),
+      },
+    ],
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
