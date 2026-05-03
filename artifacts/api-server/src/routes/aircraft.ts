@@ -8,17 +8,47 @@ interface CacheEntry {
 const CACHE_FRESH_MS = 8_000;
 const CACHE_STALE_MS = 60_000;
 
-// Fresh/stale response cache
+// adsb.fi caps the dist param at 250 nm (verified empirically:
+// dist=250 → 200, dist=300 → 400). Clamp the fallback URL.
+const ADSB_FI_MAX_DIST_NM = 250;
+
+// Fresh/stale response cache. Stored after upstream-shape normalization
+// so all consumers (and stale serves) see the same `{ac: [...]}` shape.
 const cache = new Map<string, CacheEntry>();
 // In-flight deduplication: concurrent requests for the same key share one fetch
 const inFlight = new Map<string, Promise<unknown>>();
 
-async function fetchOne(url: string): Promise<unknown> {
+interface NormalizedAircraftResponse {
+  ac: unknown[];
+  source: "adsb.lol" | "adsb.fi" | "stale-cache" | "upstream-down";
+}
+
+/**
+ * Normalize the two upstream response shapes to a single
+ * `{ac: [...]}` envelope so the client never has to branch.
+ *  - adsb.lol returns `{ac: [...], now, ...}`
+ *  - adsb.fi  returns `{aircraft: [...], now, ...}`
+ */
+function normalizeUpstream(
+  raw: unknown,
+  source: "adsb.lol" | "adsb.fi",
+): NormalizedAircraftResponse {
+  const obj = (raw ?? {}) as { ac?: unknown[]; aircraft?: unknown[] };
+  const list = Array.isArray(obj.ac)
+    ? obj.ac
+    : Array.isArray(obj.aircraft)
+      ? obj.aircraft
+      : [];
+  return { ac: list, source };
+}
+
+async function fetchOne(url: string, attempt: number): Promise<unknown> {
+  console.log("[AIRCRAFT UPSTREAM]", url, "attempt:", attempt);
   const res = await fetch(url, {
     headers: { "User-Agent": "architects-eye/1.0" },
     signal: AbortSignal.timeout(20_000),
   });
-  console.log("[AIRCRAFT UPSTREAM]", url, "status:", res.status);
+  console.log("[AIRCRAFT UPSTREAM RESP]", url, res.status);
   if (!res.ok) {
     throw new Error(`upstream HTTP ${res.status}`);
   }
@@ -29,26 +59,41 @@ async function fetchUpstream(
   key: string,
   primaryUrl: string,
   fallbackUrl: string,
-): Promise<unknown> {
+): Promise<NormalizedAircraftResponse> {
   const existing = inFlight.get(key);
-  if (existing) return existing;
+  if (existing) return existing as Promise<NormalizedAircraftResponse>;
 
-  const promise = (async () => {
+  const promise = (async (): Promise<NormalizedAircraftResponse> => {
     try {
-      const data = await fetchOne(primaryUrl);
-      cache.set(key, { data, fetchedAt: Date.now() });
-      return data;
+      const raw = await fetchOne(primaryUrl, 1);
+      const normalized = normalizeUpstream(raw, "adsb.lol");
+      cache.set(key, { data: normalized, fetchedAt: Date.now() });
+      return normalized;
     } catch (primaryErr) {
       console.log(
-        "[AIRCRAFT FALLBACK]",
-        "attempting adsb.fi",
-        "(primary err:",
+        "[AIRCRAFT FALLBACK adsb.fi]",
+        "primary err:",
         primaryErr instanceof Error ? primaryErr.message : String(primaryErr),
-        ")",
       );
-      const data = await fetchOne(fallbackUrl);
-      cache.set(key, { data, fetchedAt: Date.now() });
-      return data;
+      try {
+        const raw = await fetchOne(fallbackUrl, 2);
+        const normalized = normalizeUpstream(raw, "adsb.fi");
+        cache.set(key, { data: normalized, fetchedAt: Date.now() });
+        return normalized;
+      } catch (fallbackErr) {
+        console.log(
+          "[AIRCRAFT BOTH UPSTREAMS DOWN]",
+          "key:",
+          key,
+          "primary:",
+          primaryErr instanceof Error ? primaryErr.message : String(primaryErr),
+          "fallback:",
+          fallbackErr instanceof Error
+            ? fallbackErr.message
+            : String(fallbackErr),
+        );
+        throw fallbackErr;
+      }
     }
   })().finally(() => {
     inFlight.delete(key);
@@ -88,8 +133,12 @@ router.get("/aircraft", async (req, res) => {
   }
 
   const adsbLolUrl = `https://api.adsb.lol/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
-  // adsb.fi v2 uses the same path schema and returns the same { ac: [...] } shape.
-  const adsbFiUrl = `https://api.adsb.fi/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${distNum}`;
+  // adsb.fi opendata host (verified working: returns {aircraft: [...]}).
+  // The dist param is clamped to ADSB_FI_MAX_DIST_NM since adsb.fi
+  // returns 400 for larger radii. The reduced coverage is acceptable
+  // for a fallback path; clients still get partial data instead of zero.
+  const adsbFiDist = Math.min(distNum, ADSB_FI_MAX_DIST_NM);
+  const adsbFiUrl = `https://opendata.adsb.fi/api/v2/lat/${latNum.toFixed(4)}/lon/${lonNum.toFixed(4)}/dist/${adsbFiDist}`;
 
   try {
     const data = await fetchUpstream(key, adsbLolUrl, adsbFiUrl);
@@ -98,13 +147,15 @@ router.get("/aircraft", async (req, res) => {
     const detail = err instanceof Error ? err.message : String(err);
     req.log.error({ err, key }, "all aircraft upstreams failed");
 
-    // Serve stale cache rather than a hard 502 — even if older than
-    // CACHE_STALE_MS, since both upstreams are down anything is better
-    // than empty.
+    // Serve stale cache if anything exists, regardless of CACHE_STALE_MS,
+    // since both upstreams are down. Keep the original source label so
+    // the client can distinguish "live data shown previously" from
+    // "never had data".
     if (cached) {
       const staleAge = now - cached.fetchedAt;
       console.log("[AIRCRAFT STALE]", "returning stale cache, age_ms:", staleAge);
-      res.json(cached.data);
+      const stale = cached.data as NormalizedAircraftResponse;
+      res.json({ ac: stale.ac, source: "stale-cache" });
       return;
     }
 
