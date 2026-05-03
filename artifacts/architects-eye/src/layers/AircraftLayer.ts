@@ -46,13 +46,34 @@ function predictPosition(
   return Cesium.Cartesian3.fromDegrees(lon + dLonDeg, lat + dLatDeg, altM);
 }
 
+const TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
+  glowPower: 0.25,
+  color: Cesium.Color.fromCssColorString("#22d3ee").withAlpha(0.85),
+  taperPower: 0.5,
+});
+
+function makeAircraftPath(): Cesium.PathGraphics {
+  return new Cesium.PathGraphics({
+    leadTime: 0,
+    trailTime: 600,
+    width: 2.5,
+    resolution: 2.0,
+    material: TRAIL_MATERIAL,
+  });
+}
+
 export class AircraftLayer {
   private viewer: Cesium.Viewer;
   private entries = new Map<string, EntityEntry>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
+  private unsubscribeSelection: (() => void) | null = null;
   private currentVisibility = true;
+  // Hex of the aircraft *we* added a trail to last, so we can clean
+  // it up on the next selection change without disturbing other
+  // layers' selections.
+  private trailedHex: string | null = null;
 
   constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer;
@@ -68,6 +89,12 @@ export class AircraftLayer {
         this.applyVisibility(next);
       }
     });
+
+    // Trail rendering: subscribe to selection changes
+    this.unsubscribeSelection = useStore.subscribe((state) => {
+      this.syncTrail(state.selectedEntity);
+    });
+    this.syncTrail(useStore.getState().selectedEntity);
 
     void this.poll();
     this.pollTimer = setInterval(() => void this.poll(), POLL_INTERVAL_MS);
@@ -119,6 +146,11 @@ export class AircraftLayer {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
     }
+    if (this.unsubscribeSelection) {
+      this.unsubscribeSelection();
+      this.unsubscribeSelection = null;
+    }
+    this.trailedHex = null;
     for (const { entity } of this.entries.values()) {
       if (!this.viewer.isDestroyed()) {
         this.viewer.entities.remove(entity);
@@ -126,6 +158,30 @@ export class AircraftLayer {
     }
     this.entries.clear();
     useStore.getState().setLayerCount("aircraft", 0);
+  }
+
+  private syncTrail(
+    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+  ): void {
+    const newHex =
+      selected && selected.type === "aircraft" ? selected.id : null;
+    if (newHex === this.trailedHex) return;
+
+    // Clean up the old trail — only if WE put one there.
+    if (this.trailedHex) {
+      const prev = this.entries.get(this.trailedHex);
+      if (prev) prev.entity.path = undefined;
+    }
+
+    this.trailedHex = null;
+
+    if (newHex) {
+      const next = this.entries.get(newHex);
+      if (next) {
+        next.entity.path = makeAircraftPath();
+        this.trailedHex = newHex;
+      }
+    }
   }
 
   private applyVisibility(visible: boolean): void {

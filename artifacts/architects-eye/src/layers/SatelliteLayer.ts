@@ -1,4 +1,5 @@
 import * as Cesium from "cesium";
+import * as satellite from "satellite.js";
 import { useStore } from "../store";
 import {
   parseTLE,
@@ -11,6 +12,58 @@ import {
 import SatelliteWorker from "../workers/sgp4.worker?worker";
 
 const TICK_INTERVAL_MS = 1000;
+const SAT_TRAIL_HALF_WINDOW_S = 1800; // 30 min on each side
+const SAT_TRAIL_STEP_S = 30;
+
+const SAT_TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
+  glowPower: 0.25,
+  color: Cesium.Color.fromCssColorString("#a855f7").withAlpha(0.7),
+  taperPower: 0.6,
+});
+
+function buildSatelliteTrail(meta: SatelliteMeta, nowMs: number):
+  | Cesium.SampledPositionProperty
+  | null {
+  let rec;
+  try {
+    rec = satellite.twoline2satrec(meta.line1, meta.line2);
+  } catch {
+    return null;
+  }
+  if (!rec || (rec as { error?: number }).error) return null;
+
+  const prop = new Cesium.SampledPositionProperty();
+  prop.setInterpolationOptions({
+    interpolationDegree: 2,
+    interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
+  });
+  prop.forwardExtrapolationType = Cesium.ExtrapolationType.NONE;
+  prop.backwardExtrapolationType = Cesium.ExtrapolationType.NONE;
+
+  const startMs = nowMs - SAT_TRAIL_HALF_WINDOW_S * 1000;
+  const endMs = nowMs + SAT_TRAIL_HALF_WINDOW_S * 1000;
+  let added = 0;
+  for (let t = startMs; t <= endMs; t += SAT_TRAIL_STEP_S * 1000) {
+    const date = new Date(t);
+    let pv;
+    try {
+      pv = satellite.propagate(rec, date);
+    } catch {
+      continue;
+    }
+    if (!pv || !pv.position || typeof pv.position === "boolean") continue;
+    const gmst = satellite.gstime(date);
+    const gd = satellite.eciToGeodetic(pv.position, gmst);
+    const cart = Cesium.Cartesian3.fromRadians(
+      gd.longitude,
+      gd.latitude,
+      gd.height * 1000,
+    );
+    prop.addSample(Cesium.JulianDate.fromDate(date), cart);
+    added++;
+  }
+  return added >= 2 ? prop : null;
+}
 
 interface PickIdPayload {
   layer: "satellites";
@@ -26,6 +79,9 @@ export class SatelliteLayer {
   private primitives: Cesium.PointPrimitive[] = [];
   private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
+  private unsubscribeSelection: (() => void) | null = null;
+  private trailedNoradId: string | null = null;
+  private trailEntity: Cesium.Entity | null = null;
   private currentVisibility = true;
   private lastTickAt = 0;
   private pendingTick = false;
@@ -114,6 +170,12 @@ export class SatelliteLayer {
       this.worker?.postMessage({ type: "tick", time: date.getTime() });
     });
 
+    // Trail rendering: subscribe to selection changes
+    this.unsubscribeSelection = useStore.subscribe((state) => {
+      this.syncTrail(state.selectedEntity);
+    });
+    this.syncTrail(useStore.getState().selectedEntity);
+
     // Click handler — detects PointPrimitive picks
     this.handler = new Cesium.ScreenSpaceEventHandler(
       this.viewer.scene.canvas,
@@ -150,6 +212,15 @@ export class SatelliteLayer {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
     }
+    if (this.unsubscribeSelection) {
+      this.unsubscribeSelection();
+      this.unsubscribeSelection = null;
+    }
+    if (this.trailEntity && !this.viewer.isDestroyed()) {
+      this.viewer.entities.remove(this.trailEntity);
+    }
+    this.trailEntity = null;
+    this.trailedNoradId = null;
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
@@ -162,6 +233,44 @@ export class SatelliteLayer {
     this.metas = [];
     this.tles = [];
     useStore.getState().setLayerCount("satellites", 0);
+  }
+
+  private syncTrail(
+    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+  ): void {
+    const newId =
+      selected && selected.type === "satellite" ? selected.id : null;
+    if (newId === this.trailedNoradId) return;
+
+    // Always remove the old temp entity first
+    if (this.trailEntity && !this.viewer.isDestroyed()) {
+      this.viewer.entities.remove(this.trailEntity);
+    }
+    this.trailEntity = null;
+    this.trailedNoradId = null;
+
+    if (!newId || !selected || selected.type !== "satellite") return;
+    const meta = selected.data;
+    const nowMs = Cesium.JulianDate.toDate(
+      this.viewer.clock.currentTime,
+    ).getTime();
+    const positionProp = buildSatelliteTrail(meta, nowMs);
+    if (!positionProp) return;
+
+    this.trailEntity = this.viewer.entities.add({
+      name: `sat-trail:${meta.noradId}`,
+      position: positionProp,
+      point: undefined,
+      billboard: undefined,
+      path: new Cesium.PathGraphics({
+        leadTime: SAT_TRAIL_HALF_WINDOW_S,
+        trailTime: SAT_TRAIL_HALF_WINDOW_S,
+        width: 1.5,
+        resolution: 30,
+        material: SAT_TRAIL_MATERIAL,
+      }),
+    });
+    this.trailedNoradId = newId;
   }
 
   private onWorkerMessage(e: MessageEvent): void {

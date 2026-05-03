@@ -59,6 +59,22 @@ function predictPosition(
   return Cesium.Cartesian3.fromDegrees(lon + dLonDeg, lat + dLatDeg, 0);
 }
 
+const VESSEL_TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
+  glowPower: 0.25,
+  color: Cesium.Color.fromCssColorString("#34d399").withAlpha(0.85),
+  taperPower: 0.5,
+});
+
+function makeVesselPath(): Cesium.PathGraphics {
+  return new Cesium.PathGraphics({
+    leadTime: 0,
+    trailTime: 1800,
+    width: 2,
+    resolution: 5.0,
+    material: VESSEL_TRAIL_MATERIAL,
+  });
+}
+
 export class VesselLayer {
   private viewer: Cesium.Viewer;
   private client: AISStreamClient;
@@ -66,8 +82,10 @@ export class VesselLayer {
   private staticByMmsi = new Map<number, VesselStatic>();
   private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
+  private unsubscribeSelection: (() => void) | null = null;
   private currentVisibility = false;
   private pruneTimer: number | null = null;
+  private trailedMmsi: number | null = null;
 
   constructor(viewer: Cesium.Viewer, client: AISStreamClient) {
     this.viewer = viewer;
@@ -83,6 +101,11 @@ export class VesselLayer {
         for (const e of this.entries.values()) e.entity.show = next;
       }
     });
+
+    this.unsubscribeSelection = useStore.subscribe((state) => {
+      this.syncTrail(state.selectedEntity);
+    });
+    this.syncTrail(useStore.getState().selectedEntity);
 
     this.client.on({
       position: (p) => this.onPosition(p),
@@ -142,6 +165,11 @@ export class VesselLayer {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
     }
+    if (this.unsubscribeSelection) {
+      this.unsubscribeSelection();
+      this.unsubscribeSelection = null;
+    }
+    this.trailedMmsi = null;
     if (!this.viewer.isDestroyed()) {
       for (const { entity } of this.entries.values()) {
         this.viewer.entities.remove(entity);
@@ -150,6 +178,31 @@ export class VesselLayer {
     this.entries.clear();
     this.staticByMmsi.clear();
     useStore.getState().setLayerCount("vessels", 0);
+  }
+
+  private syncTrail(
+    selected: ReturnType<typeof useStore.getState>["selectedEntity"],
+  ): void {
+    let newMmsi: number | null = null;
+    if (selected && selected.type === "vessel") {
+      const parsed = Number.parseInt(selected.id, 10);
+      if (Number.isFinite(parsed)) newMmsi = parsed;
+    }
+    if (newMmsi === this.trailedMmsi) return;
+
+    if (this.trailedMmsi != null) {
+      const prev = this.entries.get(this.trailedMmsi);
+      if (prev) prev.entity.path = undefined;
+    }
+    this.trailedMmsi = null;
+
+    if (newMmsi != null) {
+      const next = this.entries.get(newMmsi);
+      if (next) {
+        next.entity.path = makeVesselPath();
+        this.trailedMmsi = newMmsi;
+      }
+    }
   }
 
   private onPosition(p: VesselPosition): void {
