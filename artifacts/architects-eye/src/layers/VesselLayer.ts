@@ -60,16 +60,16 @@ function predictPosition(
 }
 
 const VESSEL_TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
-  glowPower: 0.25,
-  color: Cesium.Color.fromCssColorString("#34d399").withAlpha(0.85),
-  taperPower: 0.5,
+  glowPower: 0.35,
+  color: Cesium.Color.fromCssColorString("#5eead4").withAlpha(1.0),
+  taperPower: 0.4,
 });
 
 function makeVesselPath(): Cesium.PathGraphics {
   return new Cesium.PathGraphics({
     leadTime: 0,
     trailTime: 1800,
-    width: 2,
+    width: 3,
     resolution: 5.0,
     material: VESSEL_TRAIL_MATERIAL,
   });
