@@ -102,7 +102,34 @@ export default function Viewer() {
       // Likewise, drop the default Bing imagery layer so nothing competes
       // with the Photoreal tileset for the world surface.
       viewer.imageryLayers.removeAll();
-      viewer.scene.skyAtmosphere.show = false;
+
+      // P15 — Cinematic atmosphere. The earlier seam concern is moot
+      // now that Photoreal tiles fully cover the framed area. All
+      // properties below exist on Cesium 1.140; each set is wrapped
+      // defensively so a future API rename can't crash the viewer.
+      try {
+        // skyAtmosphere is typed as possibly undefined in @types/cesium
+        // 1.140 but is always present on a fresh Viewer; the try/catch
+        // covers the (theoretical) absent case.
+        const sky = viewer.scene.skyAtmosphere!;
+        sky.show = true;
+        sky.hueShift = 0.0;
+        sky.saturationShift = 0.1;
+        sky.brightnessShift = 0.0;
+        viewer.scene.fog.enabled = true;
+        viewer.scene.fog.density = 0.0001;
+        viewer.scene.globe.showGroundAtmosphere = true;
+        // atmosphereLightIntensity / atmosphereRayleighCoefficient
+        // were added in Cesium 1.97+; safe in 1.140.
+        viewer.scene.globe.atmosphereLightIntensity = 5.0;
+        viewer.scene.globe.atmosphereRayleighCoefficient = new Cesium.Cartesian3(
+          5.5e-6,
+          13.0e-6,
+          28.4e-6,
+        );
+      } catch (err) {
+        console.warn("[P15] atmosphere tuning skipped:", err);
+      }
 
       // Real-time clock for SampledPositionProperty interpolation
       viewer.clock.currentTime = Cesium.JulianDate.now();

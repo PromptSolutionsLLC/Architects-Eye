@@ -1,7 +1,9 @@
 import Viewer from "./globe/Viewer";
+import { BootScreen } from "./components/BootScreen";
 import { EntityCardStack } from "./components/EntityCardStack";
 import { HeaderBar } from "./components/HeaderBar";
 import { LayerToggles } from "./components/LayerToggles";
+import { PerfModeController } from "./components/PerfModeController";
 import { TheaterPanel } from "./components/TheaterPanel";
 import { TheaterToast } from "./components/TheaterToast";
 import { Timeline } from "./components/Timeline";
@@ -22,6 +24,23 @@ export default function App() {
       }}
     >
       <Viewer />
+
+      {/* P15 — CRT scanline overlay. Above globe, below all UI panels
+          (panels are z 1000+; this sits at 50). Pointer-events none
+          so it never intercepts clicks. Always-on per spec. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 50,
+          opacity: 0.4,
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0,0,0,0.10) 2px, rgba(0,0,0,0.10) 3px)",
+          mixBlendMode: "multiply",
+        }}
+      />
 
       {/* Subtle amber border around the viewport when in replay mode */}
       {isReplay && (
@@ -63,6 +82,8 @@ export default function App() {
       <EntityCardStack />
       <Timeline />
       <TheaterToast />
+      <PerfModeController />
+      <BootScreen />
     </div>
   );
 }

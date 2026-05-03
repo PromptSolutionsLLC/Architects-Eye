@@ -14,4 +14,23 @@
     overflow: hidden;
     background: #000;
   }
+
+  /* P15 — Terminal-grade monospace everywhere. JetBrains Mono primary,
+     IBM Plex Mono fallback, generic monospace last resort. Tabular
+     figures so numeric counts (LayerToggles, EntityCard stats) don't
+     visually shift width as values change. */
+  html, body, #root, button, input, select, textarea {
+    font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace,
+      SFMono-Regular, Menlo, Consolas, monospace;
+    font-feature-settings: "tnum" 1, "calt" 0;
+  }
+
+  /* P15 — Boot screen blinking cursor */
+  @keyframes ae-cursor-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  .ae-boot-cursor {
+    animation: ae-cursor-blink 900ms steps(1) infinite;
+  }
 }

@@ -108,6 +108,10 @@ interface AppStore {
   isTheaterFlying: boolean;
   setTheaterFlying: (flying: boolean) => void;
 
+  // ── P15 perf kill-switch ─────────────────────────────────────────
+  perfMode: boolean;
+  setPerfMode: (next: boolean) => void;
+
   // ── Replay scrubber (P13) ───────────────────────────────────────
   playbackMode: PlaybackMode;
   replayTimestamp_ms: number | null;
@@ -368,6 +372,9 @@ export const useStore = create<AppStore>((set, get) => ({
 
   isTheaterFlying: false,
   setTheaterFlying: (flying) => set({ isTheaterFlying: flying }),
+
+  perfMode: false,
+  setPerfMode: (next) => set({ perfMode: next }),
 
   playbackMode: "live",
   replayTimestamp_ms: null,
