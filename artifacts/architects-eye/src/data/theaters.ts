@@ -47,13 +47,20 @@ export const THEATERS: TheaterDef[] = [
     name: "North Atlantic Tracks",
     description:
       "Transatlantic flight corridor — busiest oceanic airspace on Earth.",
-    camera: { lon: -40.0, lat: 50.0, height: 3_500_000, pitch: -55 },
+    // Frame the central NAT corridor between Newfoundland and Ireland
+    // at ~1500km — close enough that individual aircraft become visible
+    // (the previous 3500km / -40°,50° framing was just empty ocean).
+    camera: { lon: -45.0, lat: 52.0, height: 1_500_000, pitch: -50 },
     layers: {
       aircraft: true,
-      vessels: false,
+      // Vessels and submarine cables are dense in the North Atlantic
+      // and give the camera a visible payoff over open water.
+      vessels: true,
+      submarineCables: true,
       satellites: false,
       jamming: false,
-      restrictedAirspace: false,
+      // NAT entry/exit points are wrapped in restricted oceanic airspace.
+      restrictedAirspace: true,
       fires: false,
     },
     flyDuration: 4.5,
