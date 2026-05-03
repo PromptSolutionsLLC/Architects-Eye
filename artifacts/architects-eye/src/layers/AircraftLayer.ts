@@ -8,6 +8,12 @@ import {
   type ClickResult,
 } from "../utils/pick-resolvers";
 import {
+  registerSearchProvider,
+  unregisterSearchProvider,
+  scoreMatch,
+  type SearchResult,
+} from "../utils/search-registry";
+import {
   writeAircraftBatch,
   getBufferRange,
   getPositionsAtTime,
@@ -164,6 +170,49 @@ export class AircraftLayer {
     startEvictionTimer();
 
     registerClickResolver("aircraft", (picked) => this.resolveClick(picked));
+    registerSearchProvider("aircraft", {
+      search: (q) => this.search(q),
+      getClickResultById: (id) => this.buildClickResult(id),
+    });
+  }
+
+  private buildClickResult(hex: string): ClickResult | null {
+    const entry = this.entries.get(hex);
+    if (!entry) return null;
+    return {
+      selected: { type: "aircraft", id: hex, data: entry.ac },
+      fly: () => {
+        const pos = entry.positionProperty.getValue(
+          this.viewer.clock.currentTime,
+        );
+        if (pos) {
+          flyToInspect(this.viewer, pos, "aircraft");
+        } else {
+          console.warn(
+            "[CLICK FLY SKIP] type=aircraft id=" + hex + " reason=no_position",
+          );
+        }
+      },
+    };
+  }
+
+  private search(q: string): SearchResult[] {
+    const out: SearchResult[] = [];
+    for (const [hex, entry] of this.entries) {
+      const callsign = (entry.ac.flight ?? "").trim();
+      const cs = scoreMatch(callsign, q);
+      const hs = scoreMatch(hex, q);
+      const score = cs >= 0 && hs >= 0 ? Math.min(cs, hs) : Math.max(cs, hs);
+      if (score < 0) continue;
+      out.push({
+        type: "aircraft",
+        id: hex,
+        label: callsign || hex,
+        sublabel: "AIRCRAFT · " + hex,
+        score,
+      });
+    }
+    return out;
   }
 
   private resolveClick(picked: unknown): ClickResult | null {
@@ -202,6 +251,7 @@ export class AircraftLayer {
       this.replayRenderTimer = null;
     }
     unregisterClickResolver("aircraft");
+    unregisterSearchProvider("aircraft");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

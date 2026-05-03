@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
+import { SearchBox } from "./SearchBox";
 
 function formatUtc(d: Date): string {
   const hh = String(d.getUTCHours()).padStart(2, "0");
@@ -59,24 +60,34 @@ export function HeaderBar() {
       }}
     >
       <div
-        className="flex w-full items-center justify-between border-b border-cyan-500/20 bg-slate-950/85 backdrop-blur-md"
-        style={{ pointerEvents: "auto", paddingLeft: 14, paddingRight: 14 }}
+        className="flex w-full items-center border-b border-cyan-500/20 bg-slate-950/85 backdrop-blur-md"
+        style={{ pointerEvents: "auto", paddingLeft: 14, paddingRight: 14, gap: 14 }}
       >
-        {/* Left: logo + title */}
-        <div className="flex items-center gap-2.5">
+        {/* Left: logo + title + classification */}
+        <div className="flex items-center gap-2.5" style={{ flex: "0 0 auto" }}>
           <Logo />
           <span className="text-[12px] font-bold uppercase tracking-[0.32em] text-slate-100">
             Architect's Eye
           </span>
+          <div className="ml-2 rounded-sm bg-amber-500/20 px-3 py-[3px] font-mono text-[11px] tracking-[0.18em] text-amber-300">
+            UNCLASSIFIED // OSINT
+          </div>
         </div>
 
-        {/* Center: classification */}
-        <div className="rounded-sm bg-amber-500/20 px-3 py-[3px] font-mono text-[11px] tracking-[0.18em] text-amber-300">
-          UNCLASSIFIED // OSINT
+        {/* Center: search box (always visible, centered between left/right) */}
+        <div
+          style={{
+            flex: "1 1 auto",
+            display: "flex",
+            justifyContent: "center",
+            minWidth: 0,
+          }}
+        >
+          <SearchBox />
         </div>
 
         {/* Right: live pill + UTC clock */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" style={{ flex: "0 0 auto" }}>
           {isLive ? (
             <div className="flex items-center gap-1.5 rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-2 py-[3px] font-mono text-[11px] tracking-widest text-emerald-300">
               <span className="text-emerald-400">●</span>

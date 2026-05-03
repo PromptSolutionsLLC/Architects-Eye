@@ -11,6 +11,12 @@ import {
   unregisterClickResolver,
   type ClickResult,
 } from "../utils/pick-resolvers";
+import {
+  registerSearchProvider,
+  unregisterSearchProvider,
+  scoreMatch,
+  type SearchResult,
+} from "../utils/search-registry";
 
 const TELEPORT_NM_THRESHOLD = 100;
 const TELEPORT_S_THRESHOLD = 60;
@@ -148,16 +154,17 @@ export class VesselLayer {
     );
 
     registerClickResolver("vessel", (picked) => this.resolveClick(picked));
+    registerSearchProvider("vessel", {
+      search: (q) => this.search(q),
+      getClickResultById: (id) => {
+        const mmsi = Number.parseInt(id, 10);
+        if (!Number.isFinite(mmsi)) return null;
+        return this.buildClickResult(mmsi);
+      },
+    });
   }
 
-  private resolveClick(picked: unknown): ClickResult | null {
-    if (!picked || typeof picked !== "object") return null;
-    const id = (picked as { id?: unknown }).id;
-    if (!(id instanceof Cesium.Entity)) return null;
-    const name = id.name;
-    if (!name || !name.startsWith(ENTITY_NAME_PREFIX)) return null;
-    const mmsi = Number.parseInt(name.slice(ENTITY_NAME_PREFIX.length), 10);
-    if (!Number.isFinite(mmsi)) return null;
+  private buildClickResult(mmsi: number): ClickResult | null {
     const entry = this.entries.get(mmsi);
     if (!entry || !entry.lastPos) return null;
     const sd = this.staticByMmsi.get(mmsi);
@@ -195,12 +202,45 @@ export class VesselLayer {
     };
   }
 
+  private search(q: string): SearchResult[] {
+    const out: SearchResult[] = [];
+    for (const mmsi of this.entries.keys()) {
+      const mmsiStr = String(mmsi);
+      const sd = this.staticByMmsi.get(mmsi);
+      const name = sd?.name ?? "";
+      const ns = scoreMatch(name, q);
+      const ms = scoreMatch(mmsiStr, q);
+      const score = ns >= 0 && ms >= 0 ? Math.min(ns, ms) : Math.max(ns, ms);
+      if (score < 0) continue;
+      out.push({
+        type: "vessel",
+        id: mmsiStr,
+        label: name || `MMSI ${mmsi}`,
+        sublabel: "VESSEL · MMSI " + mmsi,
+        score,
+      });
+    }
+    return out;
+  }
+
+  private resolveClick(picked: unknown): ClickResult | null {
+    if (!picked || typeof picked !== "object") return null;
+    const id = (picked as { id?: unknown }).id;
+    if (!(id instanceof Cesium.Entity)) return null;
+    const name = id.name;
+    if (!name || !name.startsWith(ENTITY_NAME_PREFIX)) return null;
+    const mmsi = Number.parseInt(name.slice(ENTITY_NAME_PREFIX.length), 10);
+    if (!Number.isFinite(mmsi)) return null;
+    return this.buildClickResult(mmsi);
+  }
+
   destroy(): void {
     if (this.pruneTimer != null) {
       window.clearInterval(this.pruneTimer);
       this.pruneTimer = null;
     }
     unregisterClickResolver("vessel");
+    unregisterSearchProvider("vessel");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

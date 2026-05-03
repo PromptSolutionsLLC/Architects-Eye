@@ -31,6 +31,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Jamming** — static H3-hex CSV at `public/data/gpsjam-2026-05-01.csv`; cells with bad/total ≥ 5 % rendered as a red gradient via batched Cesium `Primitive` (`PolygonGeometry` per cell, `PerInstanceColorAppearance`).
 - **Restricted Airspace** — hardcoded simplified polygons in `src/data/restricted-airspace.ts` (Russia, Iran, North Korean ADIZ, Gaza, Eastern Ukraine). Rendered via `CustomDataSource` with translucent `PolygonGraphics` fill + dashed `PolylineGraphics` outline. Click → entity panel shows advisory.
 
+#### Search (P14)
+- Always-visible 320px header search box (`src/components/SearchBox.tsx`) with 150ms debounce, ↑/↓/Enter/Esc keys, click-outside blur, 2s "stale entity" toast.
+- Type priority satellite > aircraft > vessel > cable > quake; cap 10 results with "+N MORE" footer; satellites gated to query.length ≥ 3.
+- Quakes support `M5` shorthand → magnitude ≥ 5 filter.
+- Backed by `src/utils/search-registry.ts` — singleton mirroring the `pick-resolvers.ts` pattern. Each searchable layer registers a `{ search, getClickResultById }` provider in `mount()` / unregisters in `destroy()`. Selection reuses the central click pipeline (force-enable layer → `replaceUnpinnedCards` → `fly`).
+
 #### Theaters
 - 6 named camera presets in `src/data/theaters.ts` (Strait of Hormuz, Black Sea, North Atlantic Tracks, Korean DMZ, California Wildfire Belt, Russia/Ukraine).
 - `flyToTheater(viewer, theater)` in `src/utils/theaters.ts` flies the camera, applies the layer-visibility preset, and triggers the `TheaterToast` (top-center monospace card, 4 s with 300 ms fade).

@@ -16,6 +16,12 @@ import {
   unregisterClickResolver,
   type ClickResult,
 } from "../utils/pick-resolvers";
+import {
+  registerSearchProvider,
+  unregisterSearchProvider,
+  scoreMatch,
+  type SearchResult,
+} from "../utils/search-registry";
 
 const TICK_INTERVAL_MS = 1000;
 const SAT_TRAIL_HALF_WINDOW_S = 1800;
@@ -217,6 +223,10 @@ export class SatelliteLayer {
     // Resolves both PointPrimitive picks (point-mode) and model Entity
     // picks (gltf-mode) to the same satIndex payload via resolveSatIndex.
     registerClickResolver("satellite", (picked) => this.resolveClick(picked));
+    registerSearchProvider("satellite", {
+      search: (q) => this.search(q),
+      getClickResultById: (id) => this.buildClickResultByNoradId(id),
+    });
 
     // LOD: re-evaluate on camera move-end (debounced 500ms)
     this.cameraMoveRemove = this.viewer.camera.moveEnd.addEventListener(() => {
@@ -247,6 +257,7 @@ export class SatelliteLayer {
       this.clockRemove = null;
     }
     unregisterClickResolver("satellite");
+    unregisterSearchProvider("satellite");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
@@ -288,6 +299,10 @@ export class SatelliteLayer {
       primitive?: unknown;
     });
     if (satIndex === null) return null;
+    return this.buildClickResultByIndex(satIndex);
+  }
+
+  private buildClickResultByIndex(satIndex: number): ClickResult | null {
     const meta = this.metas[satIndex];
     if (!meta) return null;
     return {
@@ -311,6 +326,30 @@ export class SatelliteLayer {
         }
       },
     };
+  }
+
+  private buildClickResultByNoradId(noradId: string): ClickResult | null {
+    const idx = this.noradIdToIndex.get(noradId);
+    if (idx == null) return null;
+    return this.buildClickResultByIndex(idx);
+  }
+
+  private search(q: string): SearchResult[] {
+    const out: SearchResult[] = [];
+    for (const meta of this.metas) {
+      const ns = scoreMatch(meta.name, q);
+      const is = scoreMatch(meta.noradId, q);
+      const score = ns >= 0 && is >= 0 ? Math.min(ns, is) : Math.max(ns, is);
+      if (score < 0) continue;
+      out.push({
+        type: "satellite",
+        id: meta.noradId,
+        label: meta.name,
+        sublabel: "SATELLITE · NORAD " + meta.noradId,
+        score,
+      });
+    }
+    return out;
   }
 
   private resolveSatIndex(picked: { id?: unknown; primitive?: unknown }):

@@ -7,6 +7,12 @@ import {
   unregisterClickResolver,
   type ClickResult,
 } from "../utils/pick-resolvers";
+import {
+  registerSearchProvider,
+  unregisterSearchProvider,
+  scoreMatch,
+  type SearchResult,
+} from "../utils/search-registry";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -65,6 +71,10 @@ export class QuakesLayer {
     this.collection = collection;
 
     registerClickResolver("quake", (picked) => this.resolveClick(picked));
+    registerSearchProvider("quake", {
+      search: (q) => this.search(q),
+      getClickResultById: (id) => this.buildClickResult(id),
+    });
 
     await this.refresh();
 
@@ -86,7 +96,11 @@ export class QuakesLayer {
     if (!id || id.layer !== "quakes" || typeof id.quakeId !== "string") {
       return null;
     }
-    const quake = this.quakesById.get(id.quakeId);
+    return this.buildClickResult(id.quakeId);
+  }
+
+  private buildClickResult(quakeId: string): ClickResult | null {
+    const quake = this.quakesById.get(quakeId);
     if (!quake) return null;
     return {
       selected: { type: "quake", id: quake.id, data: quake },
@@ -99,6 +113,41 @@ export class QuakesLayer {
         flyToInspect(this.viewer, pos, "quake");
       },
     };
+  }
+
+  private search(q: string): SearchResult[] {
+    const out: SearchResult[] = [];
+    // Treat "M<n>" / "M<n.n>" as a magnitude-floor filter: typing
+    // "M5" should surface every quake with magnitude >= 5.0, not just
+    // those whose formatted "M5.x" string happens to contain "M5".
+    let magCutoff: number | null = null;
+    if (q.length >= 2 && (q[0] === "M" || q[0] === "m")) {
+      const n = Number.parseFloat(q.slice(1));
+      if (Number.isFinite(n)) magCutoff = n;
+    }
+    for (const quake of this.quakesById.values()) {
+      const magLabel = "M" + quake.magnitude.toFixed(1);
+      let score = -1;
+      if (magCutoff != null) {
+        if (quake.magnitude >= magCutoff) {
+          // Closer to the cutoff = stronger match (descending mag is fine).
+          score = 1;
+        }
+      } else {
+        const ps = scoreMatch(quake.place, q);
+        const ms = scoreMatch(magLabel, q);
+        score = ps >= 0 && ms >= 0 ? Math.min(ps, ms) : Math.max(ps, ms);
+      }
+      if (score < 0) continue;
+      out.push({
+        type: "quake",
+        id: quake.id,
+        label: magLabel,
+        sublabel: "QUAKE · " + quake.place,
+        score,
+      });
+    }
+    return out;
   }
 
   private async refresh(): Promise<void> {
@@ -146,6 +195,7 @@ export class QuakesLayer {
       this.refreshTimer = null;
     }
     unregisterClickResolver("quake");
+    unregisterSearchProvider("quake");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;

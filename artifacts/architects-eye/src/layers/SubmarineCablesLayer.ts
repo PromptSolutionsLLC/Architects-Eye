@@ -5,6 +5,12 @@ import {
   unregisterClickResolver,
   type ClickResult,
 } from "../utils/pick-resolvers";
+import {
+  registerSearchProvider,
+  unregisterSearchProvider,
+  scoreMatch,
+  type SearchResult,
+} from "../utils/search-registry";
 
 const CABLES_URL = "/data/submarine-cables.geojson";
 const DEFAULT_COLOR = "#5eead4";
@@ -39,6 +45,9 @@ export class SubmarineCablesLayer {
   private viewer: Cesium.Viewer;
   private collection: Cesium.PolylineCollection | null = null;
   private polylineToCable: Map<Cesium.Polyline, CableMeta> = new Map();
+  // Deduped meta-by-search-id (id || name). Source-of-truth for search.
+  // Cables can have many polylines per feature, so this collapses them.
+  private cablesBySearchId: Map<string, CableMeta> = new Map();
   private unsubscribeStore: (() => void) | null = null;
   private currentVisibility = false;
   private destroyed = false;
@@ -69,6 +78,14 @@ export class SubmarineCablesLayer {
     });
 
     registerClickResolver("cable", (picked) => this.resolveClick(picked));
+    registerSearchProvider("cable", {
+      search: (q) => this.search(q),
+      getClickResultById: (id) => {
+        const meta = this.cablesBySearchId.get(id);
+        if (!meta) return null;
+        return { selected: { type: "cable", id: meta.id, data: meta } };
+      },
+    });
 
     try {
       const res = await fetch(CABLES_URL);
@@ -97,6 +114,12 @@ export class SubmarineCablesLayer {
         name: props.name ?? "Unknown cable",
         color: props.color ?? DEFAULT_COLOR,
       };
+      // Stable dedup key: prefer real id, fall back to name. Cables
+      // share one meta across all sub-polylines of the feature.
+      const searchId = meta.id || meta.name;
+      if (searchId && !this.cablesBySearchId.has(searchId)) {
+        this.cablesBySearchId.set(searchId, meta);
+      }
       const cesiumColor = Cesium.Color.fromCssColorString(meta.color);
       const material = Cesium.Material.fromType("PolylineGlow", {
         color: cesiumColor,
@@ -132,9 +155,31 @@ export class SubmarineCablesLayer {
     };
   }
 
+  private search(q: string): SearchResult[] {
+    // Search ignores layer visibility — the SearchBox auto-enables the
+    // layer on selection so a user can find e.g. "MAREA" even when the
+    // submarineCables toggle is off.
+    const out: SearchResult[] = [];
+    for (const [searchId, meta] of this.cablesBySearchId) {
+      const ns = scoreMatch(meta.name, q);
+      const is = scoreMatch(searchId, q);
+      const score = ns >= 0 && is >= 0 ? Math.min(ns, is) : Math.max(ns, is);
+      if (score < 0) continue;
+      out.push({
+        type: "cable",
+        id: searchId,
+        label: meta.name,
+        sublabel: "CABLE · " + searchId,
+        score,
+      });
+    }
+    return out;
+  }
+
   destroy(): void {
     this.destroyed = true;
     unregisterClickResolver("cable");
+    unregisterSearchProvider("cable");
     if (this.unsubscribeStore) {
       this.unsubscribeStore();
       this.unsubscribeStore = null;
@@ -144,6 +189,7 @@ export class SubmarineCablesLayer {
     }
     this.collection = null;
     this.polylineToCable.clear();
+    this.cablesBySearchId.clear();
     useStore.getState().setLayerCount("submarineCables", 0);
   }
 }
