@@ -12,8 +12,17 @@ import {
 import SatelliteWorker from "../workers/sgp4.worker?worker";
 
 const TICK_INTERVAL_MS = 1000;
-const SAT_TRAIL_HALF_WINDOW_S = 1800; // 30 min on each side
+const SAT_TRAIL_HALF_WINDOW_S = 1800;
 const SAT_TRAIL_STEP_S = 30;
+
+const LOD_ALT_THRESHOLD_M = 5_000_000;
+const LOD_DEFAULT_CAP = 200;
+const LOD_REDUCED_CAP = 100;
+const LOD_DEBOUNCE_MS = 500;
+const FPS_WINDOW_MS = 1000;
+const FPS_DROP_THRESHOLD = 50;
+const MODEL_URI = `${import.meta.env.BASE_URL}assets/satellite.glb`;
+const NADIR_HPR = new Cesium.HeadingPitchRoll(0, -Math.PI / 2, 0);
 
 const SAT_TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
   glowPower: 0.25,
@@ -77,6 +86,19 @@ export class SatelliteLayer {
   private tles: TleEntry[] = [];
   private metas: SatelliteMeta[] = [];
   private primitives: Cesium.PointPrimitive[] = [];
+  // Authoritative latest position per satellite — shared by points
+  // (direct write) and model entities (read via CallbackProperty).
+  private currentPositions: Array<Cesium.Cartesian3 | null> = [];
+  private modelEntities = new Map<number, Cesium.Entity>();
+  private lodMode: "point" | "mixed" = "point";
+  private lodCap = LOD_DEFAULT_CAP;
+  private lodTimer: number | null = null;
+  private cameraMoveRemove: Cesium.Event.RemoveCallback | null = null;
+  private postRenderRemove: Cesium.Event.RemoveCallback | null = null;
+  private hasFirstPositions = false;
+  private fpsFrames = 0;
+  private fpsAccum = 0;
+  private fpsLastT = 0;
   private handler: Cesium.ScreenSpaceEventHandler | null = null;
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeSelection: (() => void) | null = null;
@@ -86,7 +108,7 @@ export class SatelliteLayer {
   private lastTickAt = 0;
   private pendingTick = false;
   private clockRemove: Cesium.Event.RemoveCallback | null = null;
-  private scratch = new Cesium.Cartesian3();
+  private scratchCamera = new Cesium.Cartesian3();
 
   constructor(viewer: Cesium.Viewer) {
     this.viewer = viewer;
@@ -99,6 +121,9 @@ export class SatelliteLayer {
       if (next !== this.currentVisibility) {
         this.currentVisibility = next;
         if (this.collection) this.collection.show = next;
+        for (const ent of this.modelEntities.values()) {
+          ent.show = next;
+        }
       }
     });
 
@@ -114,7 +139,6 @@ export class SatelliteLayer {
       text = await res.text();
     } catch (err) {
       console.error("[SatelliteLayer] TLE fetch failed:", err);
-      // Clean up the resources we already allocated so they don't leak
       this.destroy();
       return;
     }
@@ -124,6 +148,7 @@ export class SatelliteLayer {
     }
 
     this.tles = parseTLE(text);
+    this.currentPositions = new Array(this.tles.length).fill(null);
 
     for (let i = 0; i < this.tles.length; i++) {
       const t = this.tles[i];
@@ -157,7 +182,6 @@ export class SatelliteLayer {
     this.worker.onmessage = (e: MessageEvent) => this.onWorkerMessage(e);
     this.worker.postMessage({ type: "init", tles: this.tles });
 
-    // Drive ticks at 1Hz from Cesium clock
     this.clockRemove = this.viewer.clock.onTick.addEventListener(() => {
       if (this.viewer.isDestroyed()) return;
       if (!this.currentVisibility) return;
@@ -170,13 +194,13 @@ export class SatelliteLayer {
       this.worker?.postMessage({ type: "tick", time: date.getTime() });
     });
 
-    // Trail rendering: subscribe to selection changes
     this.unsubscribeSelection = useStore.subscribe((state) => {
       this.syncTrail(state.selectedEntity);
     });
     this.syncTrail(useStore.getState().selectedEntity);
 
-    // Click handler — detects PointPrimitive picks
+    // Centralized click handler — resolves both PointPrimitive picks
+    // (point-mode) and model Entity picks (gltf-mode) to the same payload.
     this.handler = new Cesium.ScreenSpaceEventHandler(
       this.viewer.scene.canvas,
     );
@@ -184,10 +208,9 @@ export class SatelliteLayer {
       (event: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
         const picked = this.viewer.scene.pick(event.position);
         if (!Cesium.defined(picked)) return;
-        const id = picked.id as Partial<PickIdPayload> | undefined;
-        if (!id || id.layer !== "satellites" || typeof id.satIndex !== "number")
-          return;
-        const meta = this.metas[id.satIndex];
+        const satIndex = this.resolveSatIndex(picked);
+        if (satIndex === null) return;
+        const meta = this.metas[satIndex];
         if (!meta) return;
         useStore.getState().setSelectedEntity({
           type: "satellite",
@@ -197,9 +220,31 @@ export class SatelliteLayer {
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );
+
+    // LOD: re-evaluate on camera move-end (debounced 500ms)
+    this.cameraMoveRemove = this.viewer.camera.moveEnd.addEventListener(() => {
+      this.scheduleLodEval();
+    });
+
+    // FPS monitor for glTF mode guardrail
+    this.postRenderRemove = this.viewer.scene.postRender.addEventListener(
+      () => this.onPostRender(),
+    );
   }
 
   destroy(): void {
+    if (this.lodTimer != null) {
+      window.clearTimeout(this.lodTimer);
+      this.lodTimer = null;
+    }
+    if (this.cameraMoveRemove) {
+      this.cameraMoveRemove();
+      this.cameraMoveRemove = null;
+    }
+    if (this.postRenderRemove) {
+      this.postRenderRemove();
+      this.postRenderRemove = null;
+    }
     if (this.clockRemove) {
       this.clockRemove();
       this.clockRemove = null;
@@ -221,6 +266,12 @@ export class SatelliteLayer {
     }
     this.trailEntity = null;
     this.trailedNoradId = null;
+    if (!this.viewer.isDestroyed()) {
+      for (const ent of this.modelEntities.values()) {
+        this.viewer.entities.remove(ent);
+      }
+    }
+    this.modelEntities.clear();
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
@@ -232,7 +283,178 @@ export class SatelliteLayer {
     this.primitives = [];
     this.metas = [];
     this.tles = [];
+    this.currentPositions = [];
     useStore.getState().setLayerCount("satellites", 0);
+  }
+
+  private resolveSatIndex(picked: { id?: unknown; primitive?: unknown }):
+    | number
+    | null {
+    const id = picked.id;
+    if (id && typeof id === "object") {
+      const maybe = id as Partial<PickIdPayload> & { properties?: unknown };
+      if (
+        maybe.layer === "satellites" &&
+        typeof maybe.satIndex === "number"
+      ) {
+        return maybe.satIndex;
+      }
+      if (id instanceof Cesium.Entity && id.properties) {
+        const v = id.properties.getValue(Cesium.JulianDate.now()) as
+          | Partial<PickIdPayload>
+          | undefined;
+        if (v && v.layer === "satellites" && typeof v.satIndex === "number") {
+          return v.satIndex;
+        }
+      }
+    }
+    return null;
+  }
+
+  private scheduleLodEval(): void {
+    if (this.lodTimer != null) {
+      window.clearTimeout(this.lodTimer);
+    }
+    this.lodTimer = window.setTimeout(() => {
+      this.lodTimer = null;
+      this.evaluateLod();
+    }, LOD_DEBOUNCE_MS);
+  }
+
+  private evaluateLod(): void {
+    if (this.viewer.isDestroyed() || !this.collection) return;
+    const cart = this.viewer.camera.positionCartographic;
+    if (!cart) return;
+    const heightM = cart.height;
+
+    if (heightM > LOD_ALT_THRESHOLD_M) {
+      if (this.lodMode !== "point" || this.modelEntities.size > 0) {
+        this.clearAllModels();
+        this.lodMode = "point";
+      }
+      return;
+    }
+
+    if (!this.hasFirstPositions) {
+      // No SGP4 ticks yet — wait, we'll re-evaluate from worker callback.
+      return;
+    }
+
+    const camPos = this.viewer.camera.positionWC;
+    // Score by squared distance to camera; only consider sats with a
+    // resolved current position.
+    const candidates: Array<{ idx: number; dist2: number }> = [];
+    for (let i = 0; i < this.currentPositions.length; i++) {
+      const p = this.currentPositions[i];
+      if (!p) continue;
+      const dx = p.x - camPos.x;
+      const dy = p.y - camPos.y;
+      const dz = p.z - camPos.z;
+      candidates.push({ idx: i, dist2: dx * dx + dy * dy + dz * dz });
+    }
+    candidates.sort((a, b) => a.dist2 - b.dist2);
+    const top = candidates.slice(0, this.lodCap);
+    const wanted = new Set<number>(top.map((c) => c.idx));
+
+    // Remove models no longer in the wanted set.
+    for (const [idx, ent] of this.modelEntities) {
+      if (!wanted.has(idx)) {
+        this.viewer.entities.remove(ent);
+        this.modelEntities.delete(idx);
+        const pp = this.primitives[idx];
+        if (pp) pp.show = true;
+      }
+    }
+    // Add new models.
+    for (const idx of wanted) {
+      if (this.modelEntities.has(idx)) continue;
+      const ent = this.createModelEntity(idx);
+      if (ent) {
+        this.modelEntities.set(idx, ent);
+        const pp = this.primitives[idx];
+        if (pp) pp.show = false;
+      }
+    }
+    this.lodMode = "mixed";
+  }
+
+  private clearAllModels(): void {
+    if (this.viewer.isDestroyed()) {
+      this.modelEntities.clear();
+      return;
+    }
+    for (const [idx, ent] of this.modelEntities) {
+      this.viewer.entities.remove(ent);
+      const pp = this.primitives[idx];
+      if (pp) pp.show = true;
+    }
+    this.modelEntities.clear();
+  }
+
+  private createModelEntity(idx: number): Cesium.Entity | null {
+    const meta = this.metas[idx];
+    if (!meta) return null;
+
+    const positionCb = new Cesium.CallbackProperty((_t, result) => {
+      const p = this.currentPositions[idx];
+      if (!p) return undefined as unknown as Cesium.Cartesian3;
+      return Cesium.Cartesian3.clone(p, result);
+    }, false) as unknown as Cesium.PositionProperty;
+
+    const orientationCb = new Cesium.CallbackProperty((_t, result) => {
+      const p = this.currentPositions[idx];
+      if (!p) return undefined as unknown as Cesium.Quaternion;
+      return Cesium.Transforms.headingPitchRollQuaternion(
+        p,
+        NADIR_HPR,
+        Cesium.Ellipsoid.WGS84,
+        undefined,
+        result as Cesium.Quaternion | undefined,
+      );
+    }, false) as unknown as Cesium.Property;
+
+    const ent = this.viewer.entities.add({
+      name: `sat-model:${meta.noradId}`,
+      position: positionCb,
+      orientation: orientationCb,
+      show: this.currentVisibility,
+      model: {
+        uri: MODEL_URI,
+        minimumPixelSize: 32,
+        maximumScale: 50_000,
+      },
+      properties: { layer: "satellites", satIndex: idx },
+    });
+    return ent;
+  }
+
+  private onPostRender(): void {
+    const now = performance.now();
+    if (this.fpsLastT === 0) {
+      this.fpsLastT = now;
+      return;
+    }
+    const dt = now - this.fpsLastT;
+    this.fpsLastT = now;
+    this.fpsFrames++;
+    this.fpsAccum += dt;
+    if (this.fpsAccum < FPS_WINDOW_MS) return;
+    const fps = (this.fpsFrames * 1000) / this.fpsAccum;
+    this.fpsAccum = 0;
+    this.fpsFrames = 0;
+    if (
+      this.lodMode === "mixed" &&
+      fps < FPS_DROP_THRESHOLD &&
+      this.lodCap === LOD_DEFAULT_CAP
+    ) {
+      console.log("[SAT LOD] fps_drop", {
+        fps: Math.round(fps),
+        cap_from: LOD_DEFAULT_CAP,
+        cap_to: LOD_REDUCED_CAP,
+      });
+      this.lodCap = LOD_REDUCED_CAP;
+      this.evaluateLod();
+    }
   }
 
   private syncTrail(
@@ -242,7 +464,6 @@ export class SatelliteLayer {
       selected && selected.type === "satellite" ? selected.id : null;
     if (newId === this.trailedNoradId) return;
 
-    // Always remove the old temp entity first
     if (this.trailEntity && !this.viewer.isDestroyed()) {
       this.viewer.entities.remove(this.trailEntity);
     }
@@ -291,16 +512,27 @@ export class SatelliteLayer {
         const altKm = buf[off + 3];
         const pp = this.primitives[idx];
         if (!pp) continue;
+        let cur = this.currentPositions[idx];
+        if (!cur) {
+          cur = new Cesium.Cartesian3();
+          this.currentPositions[idx] = cur;
+        }
         Cesium.Cartesian3.fromRadians(
           lonRad,
           latRad,
           altKm * 1000,
           undefined,
-          this.scratch,
+          cur,
         );
-        pp.position = this.scratch;
+        pp.position = cur;
         const meta = this.metas[idx];
         if (meta) meta.altitudeKm = altKm;
+      }
+      if (!this.hasFirstPositions) {
+        this.hasFirstPositions = true;
+        // First positions are in — evaluate LOD now in case the camera
+        // is already inside the model threshold.
+        this.evaluateLod();
       }
     }
   }

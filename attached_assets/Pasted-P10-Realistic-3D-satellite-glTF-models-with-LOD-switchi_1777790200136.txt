@@ -1,0 +1,36 @@
+P10: Realistic 3D satellite glTF models with LOD switching.
+
+Replace cyan triangles with proper 3D satellite models. Cesium ships free glTF satellite assets, or use a Sketchfab CC0 model — pick what loads fastest and looks credible at typical zoom levels.
+
+Approach:
+
+1. Source/bundle a single low-poly satellite glTF (~50-200KB). Place at public/assets/satellite.glb. If a free Cesium-hosted model is more reliable, use that URL directly.
+
+2. SatelliteLayer LOD strategy:
+   - Camera altitude > 5,000,000 m (5000 km) → render as current colored Point (1px) by category. Same color scheme as today.
+   - Camera altitude ≤ 5,000,000 m → render top N closest satellites (cap at 200) as glTF Entity with model: { uri: '/assets/satellite.glb', minimumPixelSize: 32, maximumScale: 50000 }. Rest stay as points.
+   - Re-evaluate LOD on camera move-end (not every frame). Throttle to 500ms.
+
+3. glTF orientation:
+   - Each rendered glTF satellite gets an OrientationProperty pointing nadir (toward Earth center). Use Cesium.Transforms.headingPitchRollQuaternion or a VelocityOrientationProperty if simpler.
+
+4. Click handling:
+   - glTF satellites must remain pickable through the central LEFT_CLICK pick resolver from P11. Same SelectedEntity{type:'satellite',...} payload as before.
+
+5. Color preservation:
+   - At point-render mode, keep current category coloring (LEO/MEO/GEO/etc). At glTF mode, no per-satellite tinting needed — model material is fine.
+
+6. Performance guardrails:
+   - If FPS drops below 50 during glTF mode, log [SAT LOD] fps_drop and reduce glTF cap from 200 to 100.
+   - Confirm 15,304 point-mode rendering still hits 165 FPS.
+
+Definition of done:
+- Globe-scale view: same colored points as today, no perf regression
+- Zoom in below 5000 km: nearest satellites visibly become 3D models, oriented toward Earth
+- Click 3D satellite → EntityPanel populates correctly via P11 central pick handler
+- FPS stays above 50 in worst case (200 glTF + 15k points + everything else)
+- Theater flythroughs that go close to ISS / GEO sats trigger the LOD swap
+
+Do not touch fires, trails, theaters, airspace, or tileset settings.
+
+After P10 verifies, send P11 next.
