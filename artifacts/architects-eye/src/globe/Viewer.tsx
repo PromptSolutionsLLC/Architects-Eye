@@ -55,6 +55,18 @@ export default function Viewer() {
       viewerRef.current = viewer;
       setViewer(viewer);
 
+      // Defensive: Cesium auto-sets trackedEntity when an entity is selected,
+      // which locks the camera onto the entity and disables mouse controls.
+      // We render trails via PathGraphics and never want camera-tracking, so
+      // clear it on every pre-render. Cheap and bulletproof against any
+      // code path (Cesium internals, double-click, future code) that tries
+      // to set it.
+      viewer.trackedEntity = undefined;
+      const clearTracked = () => {
+        if (viewer.trackedEntity) viewer.trackedEntity = undefined;
+      };
+      viewer.scene.preUpdate.addEventListener(clearTracked);
+
       viewer.scene.globe.enableLighting = true;
       viewer.scene.skyAtmosphere.show = false;
 
