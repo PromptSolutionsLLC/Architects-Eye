@@ -1,0 +1,56 @@
+P10.5: Click-to-fly for entities.
+
+When user clicks a satellite (point/glTF), aircraft, vessel, or fire, camera flies to an inspection vantage at a useful range.
+
+PICK DATA FLOW:
+- Every pickable entity must expose its ID and type to the pick handler. Verify each layer stamps `id` on its primitive/entity (satellite PointPrimitive.id = noradId, vessel Entity.id = mmsi, aircraft Entity.id = icao24, fire PointPrimitive.id = fireIndex).
+- In the central LEFT_CLICK handler, after determining the entity type, resolve current position by ID:
+  - Satellites: lookup in the satellites Map by NORAD ID, get latest Cartesian3 from currentPositions[satIndex]
+  - Aircraft: try entity.position.getValue(JulianDate.now()); if undefined, fall back to aircraft store's last raw lat/lon for that icao24 → Cartesian3.fromDegrees(lon, lat, alt_m)
+  - Vessels: try entity.position.getValue(JulianDate.now()); if undefined, fall back to vessel store's last raw lat/lon for that mmsi → Cartesian3.fromDegrees(lon, lat, 0)
+  - Fires: position from the fire's lat/lon → Cartesian3.fromDegrees(lon, lat, 0). Height 0 acceptable; do NOT add terrain sampling tonight.
+- If both primary and fallback position lookups fail, log [CLICK FLY SKIP] type=X id=Y reason=no_position, open EntityPanel, SKIP flyTo.
+
+FLYTO IMPLEMENTATION:
+- Create a temporary hidden Cesium.Entity at the resolved Cartesian3.
+- viewer.flyTo(tempEntity, { duration: 1.5, offset: new Cesium.HeadingPitchRange(heading, pitch, range) })
+- On completion or cancellation, destroy the temp entity.
+- Heading: 0 for all types.
+- Per-type pitch and range:
+  - Satellite: pitch -π/4, range 50000 m
+  - Aircraft:  pitch -π/6, range 8000 m
+  - Vessel:    pitch -π/6, range 5000 m
+  - Fire:      pitch -π/4, range 10000 m
+- Click-to-fly enabled ONLY for types: 'satellite', 'aircraft', 'vessel', 'fire'. ALL other types (airspace, jamming, future) skip flyTo.
+
+LOD CONSISTENCY (satellites only):
+- P10's LOD trigger currently uses camera altitude above Earth. CHANGE to distance-from-camera-to-satellite. For each satellite, compute Cartesian3.distance(viewer.camera.positionWC, currentPositions[i]); satellites with distance ≤ 100000 m become glTF (capped at 200, then 100 if FPS guardrail fires).
+- Distance computation MUST be throttled, not per-frame. If P10 already throttles LOD evaluation, reuse that throttle. If not, add a 500ms throttle on camera moveEnd before the LOD pass.
+- 100km threshold + 50km click-to-fly range ensures the clicked satellite is inside the LOD swap zone on arrival.
+
+LOD CAP EXCEPTION:
+- The currently-selected satellite (store.selectedEntity where type === 'satellite') always renders as glTF, regardless of distance threshold or cap. Selection bypasses LOD.
+- This guarantees click-to-fly always shows a 3D model on arrival even inside dense constellations like Starlink.
+
+THEATER COORDINATION:
+- Do NOT use viewer.camera.flying as the theater-in-progress check; theater flyTo's don't set it cleanly.
+- Use Zustand store: add isTheaterFlying boolean. Theater system sets true on flythrough start, false on completion or interruption.
+- Click-to-fly checks store.isTheaterFlying. If true → EntityPanel opens, flyTo suppressed. If false → flyTo executes.
+
+UX RULES:
+- EntityPanel opens IMMEDIATELY at click time, before flyTo. Visual treat, not a gate.
+- Do NOT set viewer.trackedEntity. Do NOT lock screenSpaceCameraController inputs. flyTo is naturally interruptible by user mouse input — preserve that.
+
+DEFINITION OF DONE:
+- Click satellite → EntityPanel opens, camera flies to 50 km off it in 1.5s, glTF model visible on arrival (even in dense constellations)
+- Click vessel → EntityPanel opens, camera flies to 5 km, ~30° looking down
+- Click aircraft → EntityPanel opens, camera flies to 8 km, ~30° looking down
+- Click fire → EntityPanel opens, camera flies to 10 km, ~45° looking down
+- Click airspace polygon or jamming hex → no flyTo, EntityPanel opens (or no-op)
+- During active theater flythrough → clicking entities opens EntityPanel only, theater not interrupted
+- User can drag/scroll mid-flyTo and camera responds (no input lock)
+
+DO NOT TOUCH:
+- Trail rendering, fires layer fetch logic, theater system internals, airspace, tileset settings, EntityPanel content.
+
+This is click → camera-flyTo wiring + LOD threshold conversion + theater state coordination + selection-bypass for LOD cap. Four things, all related.

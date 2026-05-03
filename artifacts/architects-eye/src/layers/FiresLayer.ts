@@ -84,7 +84,7 @@ export class FiresLayer {
           data: fire,
         });
         const pos = Cesium.Cartesian3.fromDegrees(fire.lon, fire.lat);
-        flyToInspect(this.viewer, pos, 10_000, -45);
+        flyToInspect(this.viewer, pos, "fire");
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );

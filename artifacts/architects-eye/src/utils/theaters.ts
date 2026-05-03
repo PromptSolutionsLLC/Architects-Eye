@@ -1,7 +1,6 @@
 import * as Cesium from "cesium";
 import { useStore, type LayerKey } from "../store";
 import type { TheaterDef } from "../data/theaters";
-import { markTheaterFly } from "./click-to-fly";
 
 export function flyToTheater(
   viewer: Cesium.Viewer,
@@ -17,8 +16,10 @@ export function flyToTheater(
     }
   }
 
-  // Mark theater fly window so click-to-fly is suppressed for its duration.
-  markTheaterFly(theater.flyDuration);
+  // Mark theater fly window. Click-to-fly checks this and suppresses
+  // entity flyTo's so the theater path is never interrupted by clicks.
+  const setTheaterFlying = useStore.getState().setTheaterFlying;
+  setTheaterFlying(true);
 
   // Fly the camera.
   viewer.camera.flyTo({
@@ -34,6 +35,8 @@ export function flyToTheater(
     },
     duration: theater.flyDuration,
     easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+    complete: () => setTheaterFlying(false),
+    cancel: () => setTheaterFlying(false),
   });
 
   // Fire toast.

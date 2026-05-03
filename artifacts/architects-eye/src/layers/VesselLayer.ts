@@ -148,10 +148,22 @@ export class VesselLayer {
           id: String(mmsi),
           data,
         });
-        const pos = entry.positionProperty.getValue(
+        let pos = entry.positionProperty.getValue(
           this.viewer.clock.currentTime,
         );
-        if (pos) flyToInspect(this.viewer, pos, 5000, -45);
+        if (!pos && entry.lastPos) {
+          pos = Cesium.Cartesian3.fromDegrees(
+            entry.lastPos.lon,
+            entry.lastPos.lat,
+            0,
+          );
+        }
+        if (pos) {
+          flyToInspect(this.viewer, pos, "vessel");
+        } else {
+          console.warn("[CLICK FLY SKIP] type=vessel id=" + mmsi +
+            " reason=no_position");
+        }
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );

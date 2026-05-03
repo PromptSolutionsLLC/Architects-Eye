@@ -128,10 +128,26 @@ export class AircraftLayer {
             id: hex,
             data: entry.ac,
           });
-          const pos = entry.positionProperty.getValue(
+          let pos = entry.positionProperty.getValue(
             this.viewer.clock.currentTime,
           );
-          if (pos) flyToInspect(this.viewer, pos, 8000, -45);
+          if (!pos && entry.ac.lat != null && entry.ac.lon != null) {
+            const altM =
+              typeof entry.ac.alt_baro === "number"
+                ? Math.max(0, entry.ac.alt_baro * 0.3048)
+                : 0;
+            pos = Cesium.Cartesian3.fromDegrees(
+              entry.ac.lon,
+              entry.ac.lat,
+              altM,
+            );
+          }
+          if (pos) {
+            flyToInspect(this.viewer, pos, "aircraft");
+          } else {
+            console.warn("[CLICK FLY SKIP] type=aircraft id=" + hex +
+              " reason=no_position");
+          }
         }
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,

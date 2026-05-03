@@ -61,6 +61,9 @@ interface AppStore {
   theaterToast: TheaterToast | null;
   showTheaterToast: (t: { name: string; description: string }) => void;
   clearTheaterToast: () => void;
+
+  isTheaterFlying: boolean;
+  setTheaterFlying: (flying: boolean) => void;
 }
 
 let toastCounter = 0;
@@ -123,4 +126,7 @@ export const useStore = create<AppStore>((set) => ({
       theaterToast: { name, description, triggerId: ++toastCounter },
     }),
   clearTheaterToast: () => set({ theaterToast: null }),
+
+  isTheaterFlying: false,
+  setTheaterFlying: (flying) => set({ isTheaterFlying: flying }),
 }));

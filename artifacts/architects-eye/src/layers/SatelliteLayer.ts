@@ -16,7 +16,9 @@ const TICK_INTERVAL_MS = 1000;
 const SAT_TRAIL_HALF_WINDOW_S = 1800;
 const SAT_TRAIL_STEP_S = 30;
 
-const LOD_ALT_THRESHOLD_M = 5_000_000;
+const LOD_DISTANCE_THRESHOLD_M = 100_000;
+const LOD_DISTANCE_THRESHOLD_M2 =
+  LOD_DISTANCE_THRESHOLD_M * LOD_DISTANCE_THRESHOLD_M;
 const LOD_DEFAULT_CAP = 200;
 const LOD_REDUCED_CAP = 100;
 const LOD_DEBOUNCE_MS = 500;
@@ -91,6 +93,7 @@ export class SatelliteLayer {
   // (direct write) and model entities (read via CallbackProperty).
   private currentPositions: Array<Cesium.Cartesian3 | null> = [];
   private modelEntities = new Map<number, Cesium.Entity>();
+  private noradIdToIndex = new Map<string, number>();
   private lodMode: "point" | "mixed" = "point";
   private lodCap = LOD_DEFAULT_CAP;
   private lodTimer: number | null = null;
@@ -166,6 +169,7 @@ export class SatelliteLayer {
         line2: t.line2,
       };
       this.metas.push(meta);
+      this.noradIdToIndex.set(meta.noradId, i);
 
       const id: PickIdPayload = { layer: "satellites", satIndex: i };
       const pp = collection.add({
@@ -197,6 +201,9 @@ export class SatelliteLayer {
 
     this.unsubscribeSelection = useStore.subscribe((state) => {
       this.syncTrail(state.selectedEntity);
+      // Selection bypass: a selected satellite must always render as
+      // glTF, even when outside the distance threshold or beyond the cap.
+      this.evaluateLod();
     });
     this.syncTrail(useStore.getState().selectedEntity);
 
@@ -219,7 +226,12 @@ export class SatelliteLayer {
           data: meta,
         });
         const pos = this.currentPositions[satIndex];
-        if (pos) flyToInspect(this.viewer, pos, 50_000, -45);
+        if (pos) {
+          flyToInspect(this.viewer, pos, "satellite");
+        } else {
+          console.warn("[CLICK FLY SKIP] type=satellite id=" +
+            meta.noradId + " reason=no_position");
+        }
       },
       Cesium.ScreenSpaceEventType.LEFT_CLICK,
     );
@@ -324,20 +336,15 @@ export class SatelliteLayer {
     }, LOD_DEBOUNCE_MS);
   }
 
+  private getSelectedSatIndex(): number | null {
+    const sel = useStore.getState().selectedEntity;
+    if (!sel || sel.type !== "satellite") return null;
+    const idx = this.noradIdToIndex.get(sel.id);
+    return idx == null ? null : idx;
+  }
+
   private evaluateLod(): void {
     if (this.viewer.isDestroyed() || !this.collection) return;
-    const cart = this.viewer.camera.positionCartographic;
-    if (!cart) return;
-    const heightM = cart.height;
-
-    if (heightM > LOD_ALT_THRESHOLD_M) {
-      if (this.lodMode !== "point" || this.modelEntities.size > 0) {
-        this.clearAllModels();
-        this.lodMode = "point";
-      }
-      return;
-    }
-
     if (!this.hasFirstPositions) {
       // No SGP4 ticks yet — wait, we'll re-evaluate from worker callback.
       return;
@@ -345,7 +352,7 @@ export class SatelliteLayer {
 
     const camPos = this.viewer.camera.positionWC;
     // Score by squared distance to camera; only consider sats with a
-    // resolved current position.
+    // resolved current position AND within the LOD distance threshold.
     const candidates: Array<{ idx: number; dist2: number }> = [];
     for (let i = 0; i < this.currentPositions.length; i++) {
       const p = this.currentPositions[i];
@@ -353,11 +360,21 @@ export class SatelliteLayer {
       const dx = p.x - camPos.x;
       const dy = p.y - camPos.y;
       const dz = p.z - camPos.z;
-      candidates.push({ idx: i, dist2: dx * dx + dy * dy + dz * dz });
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 > LOD_DISTANCE_THRESHOLD_M2) continue;
+      candidates.push({ idx: i, dist2: d2 });
     }
     candidates.sort((a, b) => a.dist2 - b.dist2);
-    const top = candidates.slice(0, this.lodCap);
-    const wanted = new Set<number>(top.map((c) => c.idx));
+    const wanted = new Set<number>(
+      candidates.slice(0, this.lodCap).map((c) => c.idx),
+    );
+
+    // Selection bypass: ensure the currently-selected satellite always
+    // renders as glTF, regardless of distance or cap.
+    const selIdx = this.getSelectedSatIndex();
+    if (selIdx != null && this.currentPositions[selIdx]) {
+      wanted.add(selIdx);
+    }
 
     // Remove models no longer in the wanted set.
     for (const [idx, ent] of this.modelEntities) {
@@ -378,7 +395,7 @@ export class SatelliteLayer {
         if (pp) pp.show = false;
       }
     }
-    this.lodMode = "mixed";
+    this.lodMode = wanted.size > 0 ? "mixed" : "point";
   }
 
   private clearAllModels(): void {
