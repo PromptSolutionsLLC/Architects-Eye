@@ -58,6 +58,17 @@ All sources are public and free.
 - **TeleGeography** — Submarine Cable Map data: https://www.submarinecablemap.com
 - **Google Maps Photorealistic 3D Tiles** — world surface mesh: https://developers.google.com/maps/documentation/tile/3d-tiles
 
+## Credits
+
+- **Inspiration:** [Bilawal Sidhu](https://twitter.com/bilawalsidhu) and his WorldView project — the spark that triggered this build.
+- **AI orchestration:** [Claude](https://claude.ai) (Anthropic) as planner, prompt engineer, and self-auditor.
+- **Code execution:** [Replit Agent 4](https://replit.com/agent) as primary builder.
+- **Built for:** [Replit 10 Year Buildathon](https://buildathons.replit.app), May 2–3, 2026.
+
+Solo build by [Zachary Wilson](https://github.com/PromptSolutionsLLC) / [Prompt Solutions LLC](https://promptsolutions.shop).
+
+---
+
 ## Local Development
 
 ```bash
