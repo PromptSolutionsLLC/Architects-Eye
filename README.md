@@ -65,7 +65,7 @@ All sources are public and free.
 - **Code execution:** [Replit Agent 4](https://replit.com/agent) as primary builder.
 - **Built for:** [Replit 10 Year Buildathon](https://buildathons.replit.app), May 2–3, 2026.
 
-Solo build by [Zachary Wilson](https://github.com/PromptSolutionsLLC) / [Prompt Solutions LLC](https://promptsolutions.shop).
+Solo build by [Zachary Wilson](https://github.com/PromptSolutionsLLC)
 
 ---
 
