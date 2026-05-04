@@ -53,3 +53,5 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# Build artifacts not for public repo
+attached_assets/
