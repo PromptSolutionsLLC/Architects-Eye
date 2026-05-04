@@ -24,7 +24,7 @@ They held.
 
 - **Real-time aircraft** — ADS-B feeds with auto-failover (adsb.lol → adsb.fi)
 - **Real-time vessels** — AIS via AISStream.io WebSocket, 21,000+ active ships
-- **Satellites** — 15,304 objects propagated client-side via SGP4 (satellite.js); high-fidelity 3D models swap in on close approach
+- **Satellites** — 15,304 objects propagated client-side via SGP4 (satellite.js); custom 4KB procedural glTF model renders on close approach
 - **GPS jamming hexes** — H3-binned interference reports from GPSJam.org
 - **Restricted airspace** — military operating areas and prohibited zones as filled polygons
 - **Live wildfires** — NASA FIRMS VIIRS + MODIS hotspots, last 24h
