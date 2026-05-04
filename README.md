@@ -61,7 +61,7 @@ All sources are public and free.
 ## Credits
 
 - **Inspiration:** [Bilawal Sidhu](https://twitter.com/bilawalsidhu) and his WorldView project — the spark that triggered this build.
-- **AI orchestration:** [Claude](https://claude.ai) (Anthropic) as planner, prompt engineer, and self-auditor.
+- **AI orchestration:** [Claude](https://claude.ai) (Anthropic) as prompt engineer and self-auditor.
 - **Code execution:** [Replit Agent 4](https://replit.com/agent) as primary builder.
 - **Built for:** [Replit 10 Year Buildathon](https://buildathons.replit.app), May 2–3, 2026.
 
