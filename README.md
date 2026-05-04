@@ -1,11 +1,25 @@
 # Architect's Eye
 
-Live OSINT terminal for global situational awareness.
+**Live OSINT terminal for global situational awareness, rendered on photorealistic 3D Earth.**
 
-**Live URL:** https://architects-eye.replit.app
+🌐 **Live demo:** https://architects-eye.replit.app
 
-![Architect's Eye](docs/hero.png)
+---
 
+## About
+
+Built from scratch solo in 24 hours for the [Replit 10 Year Buildathon](https://buildathons.replit.app) (May 2–3, 2026).
+
+I'm self-taught, sales background, 34, no CS degree. This was a test of what someone with zero formal training could build in a single day with one AI assistant ([Claude](https://claude.ai)) and one [Replit Agent](https://replit.com/agent) — not eight agents, not a weekend, just one and 24 hours.
+
+Inspired by [Bilawal Sidhu](https://twitter.com/bilawalsidhu)'s WorldView. He built his in a weekend with 8 agents. I built this in a day with 1.
+
+The real test wasn't whether I could ship features. It was whether the orchestration patterns I've been developing — digital passport handoffs between context windows, manifest diffs, meta-controller skills, adversarial self-audit frameworks, drift control across long sessions, multi-AI workflows — could carry a 24-hour solo build without falling apart.
+
+They held.
+
+---
+ 
 ## Features
 
 - **Real-time aircraft** — ADS-B feeds with auto-failover (adsb.lol → adsb.fi)
