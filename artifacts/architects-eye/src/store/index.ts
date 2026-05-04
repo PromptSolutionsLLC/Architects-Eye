@@ -112,6 +112,12 @@ interface AppStore {
   perfMode: boolean;
   setPerfMode: (next: boolean) => void;
 
+  // ── Boot readiness gates ─────────────────────────────────────────
+  tilesetReady: boolean;
+  firstAircraftBatch: boolean;
+  setTilesetReady: () => void;
+  setFirstAircraftBatch: () => void;
+
   // ── Replay scrubber (P13) ───────────────────────────────────────
   playbackMode: PlaybackMode;
   replayTimestamp_ms: number | null;
@@ -375,6 +381,11 @@ export const useStore = create<AppStore>((set, get) => ({
 
   perfMode: false,
   setPerfMode: (next) => set({ perfMode: next }),
+
+  tilesetReady: false,
+  firstAircraftBatch: false,
+  setTilesetReady: () => set({ tilesetReady: true }),
+  setFirstAircraftBatch: () => set({ firstAircraftBatch: true }),
 
   playbackMode: "live",
   replayTimestamp_ms: null,

@@ -1,6 +1,7 @@
 import Viewer from "./globe/Viewer";
 import { BootScreen } from "./components/BootScreen";
 import { EntityCardStack } from "./components/EntityCardStack";
+import { AttributionPanel } from "./components/AttributionPanel";
 import { GoogleAttribution } from "./components/GoogleAttribution";
 import { HeaderBar } from "./components/HeaderBar";
 import { LayerToggles } from "./components/LayerToggles";
@@ -85,6 +86,7 @@ export default function App() {
       <Timeline />
       <TheaterToast />
       <GoogleAttribution />
+      <AttributionPanel />
       <PerfModeController />
       <BootScreen />
       <MobileGate />

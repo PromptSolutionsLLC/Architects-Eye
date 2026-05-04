@@ -69,7 +69,7 @@ export function HeaderBar() {
           <span className="text-[12px] font-bold uppercase tracking-[0.32em] text-slate-100">
             Architect's Eye
           </span>
-          <div className="ml-2 rounded-sm bg-amber-500/20 px-3 py-[3px] font-mono text-[11px] tracking-[0.18em] text-amber-300">
+          <div className="ml-2 rounded-sm bg-amber-500/20 px-3 py-[3px] font-mono text-[11px] tracking-[0.18em] text-amber-300 border-b border-amber-400/50">
             UNCLASSIFIED // OSINT
           </div>
         </div>

@@ -116,6 +116,7 @@ export class AircraftLayer {
   private currentVisibility = true;
   private trailedHex: string | null = null;
   private replayTrailEntity: Cesium.Entity | null = null;
+  private firstBatchSignaled = false;
 
   // Replay rendering state
   private playbackMode: "live" | "replay" = "live";
@@ -372,6 +373,12 @@ export class AircraftLayer {
       }
     }
     if (this.destroyed) return;
+
+    // Signal boot readiness on first successful batch
+    if (!this.firstBatchSignaled && aircraft.length > 0) {
+      this.firstBatchSignaled = true;
+      useStore.getState().setFirstAircraftBatch();
+    }
 
     // Live render path — only when not in replay mode.
     if (this.playbackMode === "live") {

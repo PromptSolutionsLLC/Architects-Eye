@@ -106,7 +106,10 @@ function LayerRow({ spec }: RowProps) {
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <span
-          className="inline-block h-[8px] w-[8px] rounded-full"
+          className={[
+            "inline-block h-[8px] w-[8px] rounded-full",
+            !isDisabled && visible && count > 0 ? "ae-layer-pulse" : "",
+          ].join(" ")}
           style={{
             background: spec.color,
             boxShadow: isDisabled ? "none" : `0 0 6px ${spec.color}`,

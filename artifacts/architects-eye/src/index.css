@@ -15,11 +15,16 @@
     background: #000;
   }
 
-  /* P15 — Terminal-grade monospace everywhere. JetBrains Mono primary,
-     IBM Plex Mono fallback, generic monospace last resort. Tabular
-     figures so numeric counts (LayerToggles, EntityCard stats) don't
-     visually shift width as values change. */
-  html, body, #root, button, input, select, textarea {
+  /* Body sans-serif — Inter for readable prose, entity card bodies, descriptions */
+  html, body, #root {
+    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Explicit mono override for interactive + data elements (counts, labels,
+     clocks, terminal fields). Tabular figures so numerics don't shift width. */
+  button, input, select, textarea,
+  .font-mono, [class*="font-mono"],
+  code, kbd, pre {
     font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace,
       SFMono-Regular, Menlo, Consolas, monospace;
     font-feature-settings: "tnum" 1, "calt" 0;
@@ -32,5 +37,23 @@
   }
   .ae-boot-cursor {
     animation: ae-cursor-blink 900ms steps(1) infinite;
+  }
+
+  /* Layer dot pulse — glow throb when a layer has active live data */
+  @keyframes ae-layer-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.35); }
+  }
+  .ae-layer-pulse {
+    animation: ae-layer-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Boot status line cross-fade */
+  @keyframes ae-status-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .ae-status-in {
+    animation: ae-status-in 400ms ease-out forwards;
   }
 }

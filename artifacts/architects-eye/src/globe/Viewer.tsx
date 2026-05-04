@@ -131,6 +131,7 @@ export default function Viewer() {
         sky.brightnessShift = 0.0;
         viewer.scene.fog.enabled = true;
         viewer.scene.fog.density = 0.0001;
+        viewer.scene.globe.atmosphereSaturationShift = 0.3;
         viewer.scene.globe.showGroundAtmosphere = true;
         // atmosphereLightIntensity / atmosphereRayleighCoefficient
         // were added in Cesium 1.97+; safe in 1.140.
@@ -205,6 +206,7 @@ export default function Viewer() {
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
             viewerRef.current.scene.primitives.add(tileset);
+            useStore.getState().setTilesetReady();
             // Quality polish:
             //  - dynamicScreenSpaceError ON: prioritize tile detail near
             //    the camera and progressively reduce it for distant
