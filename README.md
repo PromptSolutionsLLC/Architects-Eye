@@ -58,10 +58,6 @@ All sources are public and free.
 - **TeleGeography** — Submarine Cable Map data: https://www.submarinecablemap.com
 - **Google Maps Photorealistic 3D Tiles** — world surface mesh: https://developers.google.com/maps/documentation/tile/3d-tiles
 
-## Built For
-
-Replit 10 Buildathon · May 2–3, 2026 · 24-hour build.
-
 ## Local Development
 
 ```bash
