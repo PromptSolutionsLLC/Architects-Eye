@@ -12,7 +12,7 @@ Built from scratch solo in 24 hours for the [Replit 10 Year Buildathon](https://
 
 I'm self-taught, sales background, 34, no CS degree. This was a test of what someone with zero formal training could build in a single day with one AI assistant ([Claude](https://claude.ai)) and one [Replit Agent](https://replit.com/agent) — not eight agents, not a weekend, just one and 24 hours.
 
-Inspired by [Bilawal Sidhu](https://twitter.com/bilawalsidhu)'s WorldView. He built his in a weekend with 8 agents. I built this in a day with 1.
+Inspired by [Bilawal Sidhu](https://twitter.com/bilawalsidhu)'s WorldView. He built his in a weekend with 8 agents. I was ecstatic to try and build this in a day with 1.
 
 The real test wasn't whether I could ship features. It was whether the orchestration patterns I've been developing — digital passport handoffs between context windows, manifest diffs, meta-controller skills, adversarial self-audit frameworks, drift control across long sessions, multi-AI workflows — could carry a 24-hour solo build without falling apart.
 
