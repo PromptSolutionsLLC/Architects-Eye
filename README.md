@@ -54,10 +54,10 @@ Replit 10 Buildathon · May 2–3, 2026 · 24-hour build.
 git clone <this-repo>
 pnpm install
 # Required env vars:
-#   AISSTREAM_API_KEY=<aisstream.io key>
-#   GOOGLE_MAPS_3D_KEY=<Google Maps Tiles API key>
-#   FIRMS_MAP_KEY=<NASA FIRMS key>
-#   SESSION_SECRET=<random>
+#   VITE_CESIUM_ION_TOKEN=your_cesium_ion_token
+#   VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+#   VITE_AISSTREAM_API_KEY=your_aisstream_api_key
+#   FIRMS_API_KEY=your_nasa_firms_api_key
 # Then start the api server + web app via the Replit workflows,
 # or:
 pnpm --filter @workspace/api-server run dev
