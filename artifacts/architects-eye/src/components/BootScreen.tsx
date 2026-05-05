@@ -118,7 +118,7 @@ export function BootScreen() {
 
   // "waiting" phase — watch for data gates (or 2 s grace after skip)
   useEffect(() => {
-    if (skipMount || phase !== "waiting") return;
+    if (skipMount || phase !== "waiting") return undefined;
 
     if (dataReady) {
       const t = setTimeout(() => setPhase("fading"), 300);
@@ -130,6 +130,7 @@ export function BootScreen() {
       const t = setTimeout(() => setPhase("fading"), 2_000);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [skipMount, phase, dataReady]);
 
   // Fade → done

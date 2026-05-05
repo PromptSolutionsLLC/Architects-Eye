@@ -35,8 +35,30 @@ const LOD_REDUCED_CAP = 100;
 const LOD_DEBOUNCE_MS = 500;
 const FPS_WINDOW_MS = 1000;
 const FPS_DROP_THRESHOLD = 50;
-const MODEL_URI = `${import.meta.env.BASE_URL}assets/satellite.glb`;
+// Tiered model system:
+//  - ISS_MODEL_URI: hero model used only for NORAD 25544 (ISS Zarya)
+//  - GENERIC_MODEL_URI: shared by every other LEO satellite. Cesium's
+//    glTF cache keys by URI, so all entities pointing at this URI share
+//    a single underlying glTF asset (instancing via cache, not per-
+//    entity duplication of geometry).
+//  - FALLBACK_MODEL_URI: original 4KB procedural glb. If either of the
+//    new models fails to load, we transparently fall back to it so the
+//    layer never blank-renders.
+const ISS_MODEL_URI = `${import.meta.env.BASE_URL}assets/models/iss.glb`;
+const GENERIC_MODEL_URI = `${import.meta.env.BASE_URL}assets/models/satellite-generic.glb`;
+const FALLBACK_MODEL_URI = `${import.meta.env.BASE_URL}assets/satellite.glb`;
+const ISS_NORAD_ID = "25544";
 const NADIR_HPR = new Cesium.HeadingPitchRoll(0, -Math.PI / 2, 0);
+
+// Module-level set of model URIs known to have failed to load. Once a
+// URI lands in here, subsequent createModelEntity calls skip it and use
+// FALLBACK_MODEL_URI directly. Keeps fallback decisions sticky across
+// re-evaluations and prevents a flapping render loop.
+const failedModelUris = new Set<string>();
+// First-load logging flags — fire exactly once per session per tier so
+// we can verify swaps in the browser console without spamming logs.
+let issLoggedOnce = false;
+let genericLoggedOnce = false;
 
 const SAT_TRAIL_MATERIAL = new Cesium.PolylineGlowMaterialProperty({
   glowPower: 0.25,
@@ -468,6 +490,19 @@ export class SatelliteLayer {
     this.modelEntities.clear();
   }
 
+  /**
+   * NORAD-ID dispatch for the LOD-swap glTF model.
+   *  - ISS (25544) → hero model (lazy-loaded on first ISS swap)
+   *  - everything else → generic LEO model (shared instance via URI cache)
+   *  - if either previously failed to load → procedural fallback
+   */
+  private resolveModelUri(noradId: string): string {
+    const isIss = noradId === ISS_NORAD_ID;
+    const preferred = isIss ? ISS_MODEL_URI : GENERIC_MODEL_URI;
+    if (failedModelUris.has(preferred)) return FALLBACK_MODEL_URI;
+    return preferred;
+  }
+
   private createModelEntity(idx: number): Cesium.Entity | null {
     const meta = this.metas[idx];
     if (!meta) return null;
@@ -490,19 +525,114 @@ export class SatelliteLayer {
       );
     }, false) as unknown as Cesium.Property;
 
+    const isIss = meta.noradId === ISS_NORAD_ID;
+    const uri = this.resolveModelUri(meta.noradId);
+    // ISS is rendered larger to read as the hero — both tiers stay
+    // legible at LOD swap distance via Cesium's pixel-size clamp.
+    const minPx = isIss ? 56 : 32;
+    const maxScale = isIss ? 80_000 : 50_000;
+
     const ent = this.viewer.entities.add({
       name: `sat-model:${meta.noradId}`,
       position: positionCb,
       orientation: orientationCb,
       show: this.currentVisibility,
       model: {
-        uri: MODEL_URI,
-        minimumPixelSize: 32,
-        maximumScale: 50_000,
+        uri,
+        minimumPixelSize: minPx,
+        maximumScale: maxScale,
       },
       properties: { layer: "satellites", satIndex: idx },
     });
+
+    // Wire load callbacks via the underlying ModelGraphics ready promise.
+    // We avoid throwing from here — failures degrade to the fallback URI
+    // on the *next* createModelEntity call. The current entity stays in
+    // place silently; user just sees the Cesium "missing model" warning
+    // (not a crash, not a blank render).
+    this.attachModelLoadHooks(ent, uri, isIss);
+
     return ent;
+  }
+
+  /**
+   * Listen for a one-shot model-loaded signal so we can:
+   *  - log "ISS hero model loaded" / "Generic LEO model loaded" once
+   *  - mark the URI as failed so future swaps use the fallback
+   *
+   * Cesium's Entity ModelGraphics doesn't expose a per-entity load
+   * promise, but the underlying scene Model fires `readyEvent` once and
+   * `errorEvent` on failure. We poll the scene's primitive list briefly
+   * after creation to find the matching Model and hook its events.
+   * Polling is bounded — if the Model never appears within ~3s we give
+   * up quietly (the entity is still functional even without our hooks).
+   */
+  private attachModelLoadHooks(
+    ent: Cesium.Entity,
+    uri: string,
+    isIss: boolean,
+  ): void {
+    if (uri === FALLBACK_MODEL_URI) return;
+
+    let attempts = 0;
+    const maxAttempts = 30; // ~3s at 100ms intervals
+    const tick = () => {
+      attempts++;
+      if (this.viewer.isDestroyed()) return;
+      const prims = this.viewer.scene.primitives;
+      const len = prims.length;
+      let modelPrim: Cesium.Model | null = null;
+      for (let i = 0; i < len; i++) {
+        const p = prims.get(i) as unknown as { id?: unknown } & Cesium.Model;
+        // Cesium attaches the source Entity as `id` on the spawned Model.
+        if (p && (p as { id?: unknown }).id === ent && (p as Cesium.Model).readyEvent) {
+          modelPrim = p as Cesium.Model;
+          break;
+        }
+      }
+      if (!modelPrim) {
+        if (attempts < maxAttempts) {
+          window.setTimeout(tick, 100);
+        }
+        return;
+      }
+      const onReady = () => {
+        if (isIss && !issLoggedOnce) {
+          issLoggedOnce = true;
+          console.log("ISS hero model loaded");
+        } else if (!isIss && !genericLoggedOnce) {
+          genericLoggedOnce = true;
+          console.log("Generic LEO model loaded");
+        }
+      };
+      const onError = (err: unknown) => {
+        console.warn(
+          `[SatelliteLayer] model load failed for ${uri}, falling back to procedural:`,
+          err,
+        );
+        failedModelUris.add(uri);
+        // Re-spawn this entity with the fallback URI on the next eval.
+        const idxProp = ent.properties?.getValue(Cesium.JulianDate.now()) as
+          | { satIndex?: number }
+          | undefined;
+        if (idxProp && typeof idxProp.satIndex === "number") {
+          this.viewer.entities.remove(ent);
+          this.modelEntities.delete(idxProp.satIndex);
+          // Re-create on next LOD evaluation, which is cheap and safe.
+          this.evaluateLod();
+        }
+      };
+      try {
+        modelPrim.readyEvent.addEventListener(onReady);
+        modelPrim.errorEvent.addEventListener(onError);
+        // If the model is *already* ready (fast path / cache hit), the
+        // event won't fire again — check the flag and log immediately.
+        if ((modelPrim as { ready?: boolean }).ready) onReady();
+      } catch {
+        // Cesium internals can shift between versions; never crash.
+      }
+    };
+    window.setTimeout(tick, 100);
   }
 
   private onPostRender(): void {

@@ -84,6 +84,27 @@ License 1.1. Primary terminal typeface.
 **IBM Plex Mono** — https://www.ibm.com/plex — SIL Open Font License
 1.1. Fallback monospace.
 
+## 3D Models
+
+**ISS hero model** (`public/assets/models/iss.glb`) — Procedural,
+hand-built for this project. Released under CC0. Models the
+recognizable ISS silhouette (central truss, four pressurised module
+clusters, eight solar array wings, radiators, comm dishes, Canadarm2
+stub). A search of Sketchfab for "ISS CC0" did not yield a model that
+both met the <2MB size budget and was unambiguously CC0-licensed at
+the time of authoring, so we ship a procedural stand-in instead.
+Source: `artifacts/architects-eye/scripts/build-sat-models.mjs`.
+
+**Generic LEO satellite model** (`public/assets/models/satellite-generic.glb`)
+— Procedural, hand-built for this project. Released under CC0. Octagonal
+bus, two solar arrays, antenna stub. Used (instanced via Cesium's URI
+cache) for every non-ISS satellite when within the 100km LOD threshold.
+Source: `artifacts/architects-eye/scripts/build-sat-models.mjs`.
+
+**Procedural fallback** (`public/assets/satellite.glb`) — Original 4KB
+procedural model. Released under CC0. Used as a graceful fallback if
+either tiered model fails to load.
+
 ## Acknowledgments
 
 Special thanks to the maintainers of every feed and library above —
