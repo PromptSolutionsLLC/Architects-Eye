@@ -8,7 +8,7 @@
 
 ## About
 
-Built from scratch solo in 24 hours for the [Replit 10 Year Buildathon](https://buildathons.replit.app) (May 2–3, 2026).
+Built from a blank Repl solo in 24 hours for the [Replit 10 Year Buildathon](https://buildathons.replit.app) (May 2–3, 2026).
 
 I'm self-taught, sales background, 34, no CS degree. This was a test of what someone with zero formal training could build in a single day with one AI assistant ([Claude](https://claude.ai)) and one [Replit Agent](https://replit.com/agent) — not eight agents, not a weekend, just one and 24 hours.
 
