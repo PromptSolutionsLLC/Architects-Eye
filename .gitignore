@@ -47,6 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit
 
 # Environment files (explicit — Replit system gitignore is not
 # portable across hosts, so this protects the repo on any clone).

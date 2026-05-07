@@ -91,7 +91,7 @@ function vesselInBBox(lat: number, lon: number, b: BBox): boolean {
 
 function sendSubscriptionToUpstream(): void {
   if (!upstream || upstream.readyState !== WebSocket.OPEN) return;
-  const apiKey = process.env["VITE_AISSTREAM_API_KEY"];
+  const apiKey = process.env["AISSTREAM_API_KEY"];
   if (!apiKey) return;
   const boxes = unionBBoxes();
   if (!boxes) return;
@@ -211,9 +211,9 @@ function forwardToClients(msg: unknown, raw: string): void {
 }
 
 export function setupVesselWebSocket(server: HttpServer): void {
-  if (!process.env["VITE_AISSTREAM_API_KEY"]) {
+  if (!process.env["AISSTREAM_API_KEY"]) {
     logger.warn(
-      "[ais] VITE_AISSTREAM_API_KEY not set — vessel WebSocket disabled",
+      "[ais] AISSTREAM_API_KEY not set — vessel WebSocket disabled",
     );
     return;
   }

@@ -53,11 +53,35 @@ export default function Viewer() {
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
 
-    try {
-      Cesium.Ion.defaultAccessToken =
-        import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
+    let cancelled = false;
 
-      const viewer = new Cesium.Viewer(containerRef.current, {
+    void (async () => {
+      // Fetch tokens from the backend — keys never touch the client bundle
+      let cesiumToken = "";
+      let googleMapsKey = "";
+      try {
+        const cfgRes = await fetch("/api/config");
+        if (cfgRes.ok) {
+          const cfg = (await cfgRes.json()) as {
+            cesiumToken?: string;
+            googleMapsKey?: string;
+          };
+          cesiumToken = cfg.cesiumToken ?? "";
+          googleMapsKey = cfg.googleMapsKey ?? "";
+        }
+      } catch {
+        console.warn("[CONFIG] /api/config unavailable — proceeding without tokens");
+      }
+
+      if (cancelled) return;
+
+      const container = containerRef.current;
+      if (!container) return;
+
+    try {
+      Cesium.Ion.defaultAccessToken = cesiumToken;
+
+      const viewer = new Cesium.Viewer(container, {
         timeline: false,
         animation: false,
         fullscreenButton: false,
@@ -201,7 +225,7 @@ export default function Viewer() {
       (async () => {
         try {
           const tileset = await Cesium.createGooglePhotorealistic3DTileset({
-            apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? "",
+            apiKey: googleMapsKey,
             onlyUsingWithGoogleGeocoder: true,
           });
           if (viewerRef.current && !viewerRef.current.isDestroyed()) {
@@ -336,8 +360,10 @@ export default function Viewer() {
         err instanceof Error ? err.message : "WebGL initialization failed.",
       );
     }
+    })(); // close async IIFE
 
     return () => {
+      cancelled = true;
       if (centralHandlerRef.current) {
         centralHandlerRef.current.destroy();
         centralHandlerRef.current = null;
